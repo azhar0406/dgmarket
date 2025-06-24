@@ -34,7 +34,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.windsurfrules
+/.windsurf
 /contracts/node_modules
 /contracts/coverage
 /contracts/.env
