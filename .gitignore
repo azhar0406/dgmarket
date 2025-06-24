@@ -34,3 +34,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.windsurfrules
+/contracts/node_modules
+/contracts/coverage
+/contracts/.env
+/contracts/.env.local
+/contracts/npm-debug.log*
+/contracts/yarn-debug.log*
+/contracts/yarn-error.log*
+/contracts/yarn.lock
+/contracts/cache
+
