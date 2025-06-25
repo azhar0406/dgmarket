@@ -1,0 +1,32 @@
+{
+  "name": "dgmarket-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "pino-pretty": "^10.3.1",
+    "react": "^18",
+    "react-dom": "^18",
+    "wagmi": "^2.0.0",
+    "viem": "^2.0.0",
+    "@inco/js": "^0.1.0",
+    "fhevmjs": "^0.2.0",
+    "@tanstack/react-query": "^5.0.0",
+    "zustand": "^4.4.0",
+    "tailwindcss": "^3.3.0",
+    "postcss": "^8",
+    "autoprefixer": "^10.0.1",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4"
+  }
+}
