@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@inco/lightning/src/Lib.sol";
-import "@openzeppelin/contracts/access/Ownable2Step.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
@@ -11,7 +11,11 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
  * @dev A confidential gift card contract using Inco Lightning's TEE technology
  * @notice This contract enables privacy-preserving gift card operations with enhanced security
  */
-contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
+contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
+    
+    // Role definitions
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant BACKEND_ROLE = keccak256("BACKEND_ROLE");
     
     // Struct for gift card metadata (non-encrypted public data)
     struct GiftCardMetadata {
@@ -65,8 +69,12 @@ contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
         _;
     }
     
-    constructor() Ownable(msg.sender) {
+    constructor() {
         nextCardId = 1;
+        
+        // Setup roles
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
     }
     
     /**
@@ -83,6 +91,102 @@ contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
         string calldata imageUrl,
         uint256 expiryDate
     ) external whenNotPaused nonReentrant returns (uint256 cardId) {
+        require(bytes(description).length > 0, "Description cannot be empty");
+        require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
+        
+        // Convert encrypted input to euint256
+        euint256 value = e.newEuint256(valueInput, msg.sender);
+        
+        // Assign card ID
+        cardId = nextCardId;
+        nextCardId++;
+        
+        // Store encrypted gift card data
+        giftCardValues[cardId] = value;
+        giftCardActive[cardId] = e.asEbool(true);
+        giftCardOwners[cardId] = msg.sender; // Regular address assignment
+        
+        // Allow access to the encrypted values
+        e.allow(giftCardValues[cardId], address(this));
+        e.allow(giftCardValues[cardId], msg.sender);
+        e.allow(giftCardActive[cardId], address(this));
+        e.allow(giftCardActive[cardId], msg.sender);
+        
+        // Store public metadata
+        giftCardMetadata[cardId] = GiftCardMetadata({
+            description: description,
+            imageUrl: imageUrl,
+            expiryDate: expiryDate,
+            creator: msg.sender,
+            exists: true
+        });
+        
+        emit GiftCardCreated(cardId, msg.sender, description);
+        return cardId;
+    }
+    
+    /**
+     * @dev Creates a new gift card with encrypted value (admin only)
+     * @param valueInput The encrypted value of the gift card
+     * @param description Public description of the gift card
+     * @param imageUrl Public image URL for the gift card
+     * @param expiryDate Expiry timestamp (0 for no expiry)
+     * @return cardId The ID of the newly created gift card
+     */
+    function adminCreateGiftCard(
+        bytes memory valueInput,
+        string calldata description,
+        string calldata imageUrl,
+        uint256 expiryDate
+    ) external whenNotPaused nonReentrant onlyRole(ADMIN_ROLE) returns (uint256 cardId) {
+        require(bytes(description).length > 0, "Description cannot be empty");
+        require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
+        
+        // Convert encrypted input to euint256
+        euint256 value = e.newEuint256(valueInput, msg.sender);
+        
+        // Assign card ID
+        cardId = nextCardId;
+        nextCardId++;
+        
+        // Store encrypted gift card data
+        giftCardValues[cardId] = value;
+        giftCardActive[cardId] = e.asEbool(true);
+        giftCardOwners[cardId] = msg.sender; // Regular address assignment
+        
+        // Allow access to the encrypted values
+        e.allow(giftCardValues[cardId], address(this));
+        e.allow(giftCardValues[cardId], msg.sender);
+        e.allow(giftCardActive[cardId], address(this));
+        e.allow(giftCardActive[cardId], msg.sender);
+        
+        // Store public metadata
+        giftCardMetadata[cardId] = GiftCardMetadata({
+            description: description,
+            imageUrl: imageUrl,
+            expiryDate: expiryDate,
+            creator: msg.sender,
+            exists: true
+        });
+        
+        emit GiftCardCreated(cardId, msg.sender, description);
+        return cardId;
+    }
+    
+    /**
+     * @dev Creates a new gift card with encrypted value (backend only)
+     * @param valueInput The encrypted value of the gift card
+     * @param description Public description of the gift card
+     * @param imageUrl Public image URL for the gift card
+     * @param expiryDate Expiry timestamp (0 for no expiry)
+     * @return cardId The ID of the newly created gift card
+     */
+    function backendCreateGiftCard(
+        bytes memory valueInput,
+        string calldata description,
+        string calldata imageUrl,
+        uint256 expiryDate
+    ) external whenNotPaused nonReentrant onlyRole(BACKEND_ROLE) returns (uint256 cardId) {
         require(bytes(description).length > 0, "Description cannot be empty");
         require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
         
@@ -307,7 +411,7 @@ contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
      */
     function requestUserBalanceDecryption(
         address user
-    ) external onlyOwner returns (uint256) {
+    ) external onlyRole(ADMIN_ROLE) returns (uint256) {
         euint256 encryptedBalance = balances[user];
         e.allow(encryptedBalance, address(this));
         
@@ -328,7 +432,7 @@ contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
      */
     function requestGiftCardValueDecryption(
         uint256 cardId
-    ) external onlyOwner validCardId(cardId) returns (uint256) {
+    ) external onlyRole(ADMIN_ROLE) validCardId(cardId) returns (uint256) {
         euint256 encryptedValue = giftCardValues[cardId];
         e.allow(encryptedValue, address(this));
         
@@ -383,16 +487,60 @@ contract ConfidentialGiftCard is Ownable2Step, ReentrancyGuard, Pausable {
     }
     
     /**
+     * @dev Grant admin role to an address
+     * @param account The address to grant the role to
+     */
+    function grantAdminRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _grantRole(ADMIN_ROLE, account);
+    }
+    
+    /**
+     * @dev Revoke admin role from an address
+     * @param account The address to revoke the role from
+     */
+    function revokeAdminRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _revokeRole(ADMIN_ROLE, account);
+    }
+    
+    /**
+     * @dev Grant backend role to an address
+     * @param account The address to grant the role to
+     */
+    function grantBackendRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _grantRole(BACKEND_ROLE, account);
+    }
+    
+    /**
+     * @dev Revoke backend role from an address
+     * @param account The address to revoke the role from
+     */
+    function revokeBackendRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _revokeRole(BACKEND_ROLE, account);
+    }
+    
+    /**
      * @dev Emergency pause function
      */
-    function pause() external onlyOwner {
+    function pause() external onlyRole(ADMIN_ROLE) {
         _pause();
     }
     
     /**
      * @dev Unpause function
      */
-    function unpause() external onlyOwner {
+    function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
     }
 }

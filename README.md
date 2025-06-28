@@ -1,22 +1,35 @@
-# DG Market Frontend
+# DG Market
 
-A Next.js 14 frontend for the DG Market (Decentralized Gift Card Marketplace) project, featuring privacy-first gift card trading using Inco Lightning's Trusted Execution Environment (TEE) for confidential smart contracts.
+A decentralized gift card marketplace using Inco Lightning's Trusted Execution Environment (TEE) for confidential smart contracts and Chainlink Functions for automated gift card restocking.
 
 ## Features
 
 - **Privacy-First Design**: Encrypted gift card values and private user balances
 - **Multi-Token Support**: Accept payments in various ERC-20 tokens
 - **Secure Ownership Transfer**: Confidential gift card transfers
-- **AI-Driven Agents**: Multi-agent system for marketplace optimization
+- **Chainlink Functions**: Automated gift card restocking via Chainlink Functions
 - **Chainlink Integration**: Price feeds and automation for reliable data
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React 18
-- **Blockchain Integration**: Wagmi v2, Viem 2.0
-- **Encryption**: fhevmjs for client-side encryption
-- **State Management**: React Query, Zustand
-- **Styling**: Tailwind CSS
+### Frontend
+- Next.js 14, React 18
+- Wagmi v2, Viem 2.0
+- fhevmjs for client-side encryption
+- React Query, Zustand
+- Tailwind CSS, Chakra UI
+
+### Backend
+- Node.js with Express
+- Ethers.js for blockchain interaction
+- Winston for logging
+- Axios for API requests
+
+### Smart Contracts
+- Solidity 0.8.24
+- OpenZeppelin contracts
+- Chainlink Functions v1.0.0
+- Inco Lightning TEE
 
 ## Prerequisites
 
@@ -31,112 +44,175 @@ A Next.js 14 frontend for the DG Market (Decentralized Gift Card Marketplace) pr
 1. Clone the repository:
    ```bash
    git clone https://github.com/yourusername/dgmarket.git
-   cd dgmarket/frontend
+   cd dgmarket
    ```
 
-2. Install dependencies:
+2. Install dependencies for all components:
    ```bash
+   # Install frontend dependencies
+   cd frontend
    pnpm install
+   cd ..
+   
+   # Install backend dependencies
+   cd backend
+   npm install
+   cd ..
+   
+   # Install contract dependencies
+   cd contracts
+   npm install
    ```
 
-3. Create a `.env.local` file in the frontend directory:
+3. Create environment files:
+
+   **Frontend (.env.local in frontend directory):**
    ```
    NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+   NEXT_PUBLIC_ENVIRONMENT=local # Options: local, testnet, mainnet
    ```
 
-### Running the Frontend
-
-Start the development server:
-
-```bash
-pnpm dev
-```
-
-The application will be available at [http://localhost:3000](http://localhost:3000).
-
-## Smart Contract Deployment
-
-Before using the frontend with live contracts, you need to deploy the smart contracts to Base Sepolia testnet.
-
-### Contract Deployment Steps
-
-1. Navigate to the project root:
-   ```bash
-   cd ..
+   **Backend (.env in backend directory):**
+   ```
+   PORT=3001
+   RPC_URL=https://base-sepolia-rpc.publicnode.com
+   PRIVATE_KEY=your_backend_wallet_private_key
+   CHAINLINK_MANAGER_ADDRESS=your_deployed_contract_address
+   CONFIDENTIAL_GIFTCARD_ADDRESS=your_deployed_contract_address
+   GIFT_CARD_API_URL=https://api.giftcards.com
+   LOG_LEVEL=info
    ```
 
-2. Create a `.env` file in the project root with your wallet private key:
+   **Contracts (.env in contracts directory):**
    ```
    PRIVATE_KEY=your_wallet_private_key
    BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+   CHAINLINK_SUBSCRIPTION_ID=your_chainlink_subscription_id
+   CHAINLINK_DON_ID=your_chainlink_don_id
    ```
 
-3. Deploy contracts using Hardhat Ignition:
+## Running the Application
+
+### Frontend
+
+```bash
+cd frontend
+pnpm dev
+```
+
+The frontend will be available at [http://localhost:3000](http://localhost:3000).
+
+### Backend
+
+```bash
+cd backend
+npm run dev
+```
+
+The backend service will start on port 3001 (or as configured in .env).
+
+## Smart Contract Deployment
+
+1. Navigate to the contracts directory:
    ```bash
-   pnpm hardhat ignition deploy ./ignition/modules/DGMarketDeploy.ts --network base-sepolia
+   cd contracts
    ```
 
-4. After deployment, configure the contracts:
+2. Deploy contracts using Hardhat:
    ```bash
-   node scripts/configure-viem.js
+   npx hardhat run scripts/deploy.js --network base-sepolia
    ```
 
-### Updating Contract Addresses
-
-After deployment, update the contract addresses in the frontend:
-
-1. Open `/frontend/utils/contracts.js`
-2. Update the `CONTRACT_ADDRESSES` object with the addresses from your deployment
+3. After deployment, update the contract addresses in:
+   - Frontend: `/frontend/constants/addresses.js`
+   - Backend: `.env` file
 
 ## Project Structure
 
 ```
-frontend/
-├── app/                  # Next.js app directory
-│   ├── agents/           # AI agents page
-│   ├── create/           # Create gift card page
-│   ├── marketplace/      # Gift card marketplace page
-│   ├── my-cards/         # User's gift cards page
-│   ├── globals.css       # Global styles
-│   ├── layout.js         # Root layout with providers
-│   ├── page.js           # Landing page
-│   └── providers.js      # React providers configuration
-├── components/           # Reusable components
-│   ├── Footer.js         # Site footer
-│   └── Header.js         # Site header with wallet connection
-├── utils/                # Utility functions
-│   ├── contracts.js      # Smart contract interaction utilities
-│   └── encryption.js     # Encryption utilities for TEE
-├── public/               # Static assets
-├── next.config.js        # Next.js configuration
-├── tailwind.config.js    # Tailwind CSS configuration
-└── package.json          # Project dependencies
+├── frontend/                  # Next.js frontend application
+│   ├── app/                   # Next.js app directory
+│   ├── components/            # Reusable React components
+│   ├── constants/             # Contract ABIs and addresses
+│   ├── hooks/                 # Custom React hooks
+│   └── utils/                 # Utility functions
+│
+├── backend/                   # Node.js backend service
+│   ├── abis/                  # Contract ABIs for backend
+│   ├── controllers/           # API route controllers
+│   ├── services/              # Business logic services
+│   ├── utils/                 # Utility functions
+│   └── index.js               # Main entry point
+│
+└── contracts/                 # Solidity smart contracts
+    ├── contracts/             # Contract source files
+    │   ├── ChainlinkGiftCardManager.sol  # Gift card inventory with Chainlink Functions
+    │   ├── ConfidentialGiftCard.sol      # TEE-based encrypted gift cards
+    │   └── DGMarketCore.sol              # Core marketplace functionality
+    ├── scripts/               # Deployment and testing scripts
+    └── test/                  # Contract test files
 ```
 
-## Key Pages
+## Smart Contract Architecture
+
+### DGMarketCore.sol
+- Core marketplace functionality
+- Handles listings, purchases, and payments
+- Implements AccessControl for role-based permissions
+- Manages supported payment tokens
+
+### ConfidentialGiftCard.sol
+- ERC721 token representing gift cards
+- Stores encrypted gift card values using TEE
+- Handles ownership transfers and redemption requests
+- Implements access control for admin and backend roles
+
+### ChainlinkGiftCardManager.sol
+- Manages gift card inventory by category
+- Uses Chainlink Functions to request restocking from external APIs
+- Implements threshold-based automated restocking
+- Tracks inventory levels and pending requests
+
+## Backend Service
+
+The backend service performs several key functions:
+
+1. **Event Monitoring**: Listens for blockchain events like `RestockRequested` and `RestockFulfilled`
+2. **API Integration**: Communicates with external gift card providers
+3. **Transaction Submission**: Adds new gift cards to the blockchain when restocking
+4. **Health Monitoring**: Provides endpoints to check system status
+
+### Key Endpoints
+
+- `GET /health`: Check service status
+- `POST /restock`: Manually trigger restocking for a category
+- `GET /inventory/:category`: Get current inventory for a category
+
+## Frontend Components
+
+### Key Pages
 
 - **Home (`/`)**: Landing page with project information
 - **Marketplace (`/marketplace`)**: Browse and purchase gift cards
 - **My Cards (`/my-cards`)**: View created and purchased gift cards
 - **Create (`/create`)**: Create new gift cards
-- **Agents (`/agents`)**: Interact with AI agents
+- **Admin (`/admin`)**: Admin dashboard for inventory management
 
-## Encryption Flow
+### Admin Dashboard
 
-1. User connects wallet
-2. Frontend initializes fhevmjs encryption instance
-3. When creating a gift card, the value is encrypted client-side
-4. Smart contract stores the encrypted value
-5. Only the owner or buyer can decrypt the value
+The admin dashboard includes:
 
-## Contract Integration
+- Gift card inventory management
+- Role-based access control
+- Restock request management
+- Threshold configuration
 
-The frontend interacts with four main contracts:
+## Chainlink Functions Integration
 
-1. **ConfidentialGiftCard**: Handles encrypted gift card creation and transfers
-2. **DGMarketCore**: Manages marketplace listings and purchases
-3. **PriceOracle**: Provides token price feeds via Chainlink
-4. **AgentCoordinator**: Coordinates AI agents for market optimization
+1. **Subscription Setup**: Create a Chainlink Functions subscription
+2. **DON Configuration**: Configure the Decentralized Oracle Network
+3. **JavaScript Source**: Define API request logic in the contract
+4. **Request Flow**: Contract requests data → Chainlink executes → Backend processes response
 
 ## Development Guidelines
 

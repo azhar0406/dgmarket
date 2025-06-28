@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@inco/lightning/src/Lib.sol";
-import "@openzeppelin/contracts/access/Ownable2Step.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -15,8 +15,12 @@ import "./ConfidentialGiftCard.sol";
  * @dev Enhanced core marketplace contract for DG Market with privacy-preserving features
  * @notice This contract enables buying, selling, and trading gift cards with encrypted pricing
  */
-contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
+contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    
+    // Role definitions
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant BACKEND_ROLE = keccak256("BACKEND_ROLE");
     
     // Contracts
     ConfidentialGiftCard public immutable giftCardContract;
@@ -106,24 +110,25 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
     constructor(
         address _giftCardContract,
         uint256 _initialFeePercent
-    ) Ownable(msg.sender) {
+    ) {
         require(_giftCardContract != address(0), "Invalid gift card contract");
         require(_initialFeePercent <= MAX_FEE_PERCENT, "Fee too high");
         
         giftCardContract = ConfidentialGiftCard(_giftCardContract);
         marketplaceFeePercent = _initialFeePercent;
         nextListingId = 1;
+        
+        // Setup roles
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
     }
     
     /**
-     * @dev Add a supported payment token with optional price feed
-     * @param token The ERC20 token address
-     * @param priceFeed The Chainlink price feed for this token (can be zero)
+     * @dev Add a supported payment token
+     * @param token The ERC20 token address to add
+     * @param priceFeed The Chainlink price feed address for this token
      */
-    function addSupportedToken(
-        address token, 
-        address priceFeed
-    ) external onlyOwner {
+    function addSupportedToken(address token, address priceFeed) external onlyRole(ADMIN_ROLE) {
         require(token != address(0), "Invalid token address");
         require(!supportedTokens[token], "Token already supported");
         
@@ -141,7 +146,7 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @dev Remove a supported payment token
      * @param token The ERC20 token address to remove
      */
-    function removeSupportedToken(address token) external onlyOwner {
+    function removeSupportedToken(address token) external onlyRole(ADMIN_ROLE) {
         require(supportedTokens[token], "Token not supported");
         
         supportedTokens[token] = false;
@@ -164,7 +169,7 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @param token The ERC20 token address
      * @param priceFeed The new Chainlink price feed address
      */
-    function updatePriceFeed(address token, address priceFeed) external onlyOwner {
+    function updatePriceFeed(address token, address priceFeed) external onlyRole(ADMIN_ROLE) {
         require(supportedTokens[token], "Token not supported");
         require(priceFeed != address(0), "Invalid price feed address");
         
@@ -176,7 +181,7 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @dev Update marketplace fee percentage
      * @param newFeePercent New fee percentage in basis points
      */
-    function updateFee(uint256 newFeePercent) external onlyOwner {
+    function updateFee(uint256 newFeePercent) external onlyRole(ADMIN_ROLE) {
         require(newFeePercent <= MAX_FEE_PERCENT, "Fee too high");
         marketplaceFeePercent = newFeePercent;
         emit FeeUpdated(newFeePercent);
@@ -186,7 +191,7 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @dev Add a new category
      * @param category The category name to add
      */
-    function addCategory(string calldata category) external onlyOwner {
+    function addCategory(string calldata category) external onlyRole(ADMIN_ROLE) {
         require(bytes(category).length > 0, "Empty category");
         require(!categoryExists[category], "Category already exists");
         
@@ -509,18 +514,18 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @param token The token to withdraw
      * @param amount The amount to withdraw
      */
-    function withdrawFees(address token, uint256 amount) external onlyOwner nonReentrant {
-        IERC20(token).safeTransfer(owner(), amount);
+    function withdrawFees(address token, uint256 amount) external onlyRole(ADMIN_ROLE) nonReentrant {
+        IERC20(token).safeTransfer(msg.sender, amount);
     }
     
     /**
      * @dev Emergency function to withdraw all fees for a token
      * @param token The token to withdraw all fees for
      */
-    function emergencyWithdrawFees(address token) external onlyOwner nonReentrant {
+    function emergencyWithdrawFees(address token) external onlyRole(ADMIN_ROLE) nonReentrant {
         uint256 balance = IERC20(token).balanceOf(address(this));
         if (balance > 0) {
-            IERC20(token).safeTransfer(owner(), balance);
+            IERC20(token).safeTransfer(msg.sender, balance);
         }
     }
     
@@ -542,14 +547,14 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
     }
     
     /**
- * @dev Get listing basic info (non-encrypted data)
- * @param listingId The listing ID
- * @return cardId The ID of the gift card
- * @return seller The address of the seller
- * @return paymentToken The address of the token used for payment
- * @return listedAt The timestamp when the listing was created
- * @return category The category of the gift card
- */
+     * @dev Get listing basic info (non-encrypted data)
+     * @param listingId The listing ID
+     * @return cardId The ID of the gift card
+     * @return seller The address of the seller
+     * @return paymentToken The address of the token used for payment
+     * @return listedAt The timestamp when the listing was created
+     * @return category The category of the gift card
+     */
     function getListingInfo(uint256 listingId) external view validListingId(listingId) returns (
         uint256 cardId,
         address seller,
@@ -571,7 +576,7 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @dev Emergency function to cancel any listing (owner only)
      * @param listingId The listing ID to cancel
      */
-    function emergencyCancelListing(uint256 listingId) external onlyOwner validListingId(listingId) {
+    function emergencyCancelListing(uint256 listingId) external onlyRole(ADMIN_ROLE) validListingId(listingId) {
         Listing storage listing = listings[listingId];
         
         // Transfer gift card back to seller
@@ -587,14 +592,14 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
     /**
      * @dev Pause the contract (emergency function)
      */
-    function pause() external onlyOwner {
+    function pause() external onlyRole(ADMIN_ROLE) {
         _pause();
     }
     
     /**
      * @dev Unpause the contract
      */
-    function unpause() external onlyOwner {
+    function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
     }
     
@@ -603,8 +608,52 @@ contract DGMarketCore is Ownable2Step, ReentrancyGuard, Pausable {
      * @param cardId The gift card ID to recover
      * @param to The address to send the gift card to
      */
-    function emergencyRecoverGiftCard(uint256 cardId, address to) external onlyOwner {
+    function emergencyRecoverGiftCard(uint256 cardId, address to) external onlyRole(ADMIN_ROLE) {
         require(to != address(0), "Invalid recipient");
         giftCardContract.marketplaceTransfer(cardId, address(this), to);
+    }
+    
+    /**
+     * @dev Grant admin role to an address
+     * @param account The address to grant the role to
+     */
+    function grantAdminRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _grantRole(ADMIN_ROLE, account);
+    }
+    
+    /**
+     * @dev Revoke admin role from an address
+     * @param account The address to revoke the role from
+     */
+    function revokeAdminRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _revokeRole(ADMIN_ROLE, account);
+    }
+    
+    /**
+     * @dev Grant backend role to an address
+     * @param account The address to grant the role to
+     */
+    function grantBackendRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _grantRole(BACKEND_ROLE, account);
+    }
+    
+    /**
+     * @dev Revoke backend role from an address
+     * @param account The address to revoke the role from
+     */
+    function revokeBackendRole(address account) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _revokeRole(BACKEND_ROLE, account);
     }
 }
