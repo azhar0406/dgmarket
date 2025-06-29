@@ -510,74 +510,21 @@ async function addGiftCardToContract(card, category, requestId, cardIndex) {
   }
 }
 
-// API route for gift card restocking
-app.get('/api/restock', async (req, res) => {
-  try {
-    const { category } = req.query;
-    
-    // Default to Gaming if no category specified
-    const targetCategory = category || 'Gaming';
-    
-    if (!mockGiftCards[targetCategory]) {
-      return res.status(404).json({
-        error: 'Category not found',
-        availableCategories: Object.keys(mockGiftCards)
-      });
+// API routes
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    message: 'DG Market Backend API',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      contracts: '/api/contracts',
+      manualRestock: '/api/restock',
+      testApi: '/api/test-api/:category'
     }
-    
-    // Get 2 random cards from the category
-    const cards = getRandomCardsFromCategory(targetCategory, 2);
-    
-    // Log the request
-    logger.info('Restock request received', { 
-      category: targetCategory, 
-      cardCount: cards.length 
-    });
-    
-    // Return the cards in the format expected by the Chainlink function
-    res.status(200).json({
-      success: true,
-      category: targetCategory,
-      timestamp: Math.floor(Date.now() / 1000),
-      cards: cards
-    });
-  } catch (error) {
-    logger.error('Error processing restock request', { error: error.message });
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+  });
 });
 
-// Manual function to test API connectivity
-async function testGiftCardAPI(category = 'Gaming') {
-  try {
-    logger.info('Testing gift card API connectivity', { category });
-    
-    const response = await axios.get(`${GIFT_CARD_API_URL}/restock`, {
-      params: { category },
-      timeout: 10000
-    });
-    
-    logger.info('API test successful', { 
-      category,
-      status: response.status,
-      cardsReceived: response.data.cards?.length || 0
-    });
-    
-    return response.data;
-  } catch (error) {
-    logger.error('API test failed', { 
-      category,
-      error: error.message,
-      url: `${GIFT_CARD_API_URL}/restock?category=${category}`
-    });
-    throw error;
-  }
-}
-
-// API routes
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok',
@@ -696,6 +643,73 @@ app.post('/api/clear-processed', (req, res) => {
     message: `Cleared ${count} processed requests`
   });
 });
+
+// API route for gift card restocking
+app.get('/api/restock', async (req, res) => {
+  try {
+    const { category } = req.query;
+    
+    // Default to Gaming if no category specified
+    const targetCategory = category || 'Gaming';
+    
+    if (!mockGiftCards[targetCategory]) {
+      return res.status(404).json({
+        error: 'Category not found',
+        availableCategories: Object.keys(mockGiftCards)
+      });
+    }
+    
+    // Get 2 random cards from the category
+    const cards = getRandomCardsFromCategory(targetCategory, 2);
+    
+    // Log the request
+    logger.info('Restock request received', { 
+      category: targetCategory, 
+      cardCount: cards.length 
+    });
+    
+    // Return the cards in the format expected by the Chainlink function
+    res.status(200).json({
+      success: true,
+      category: targetCategory,
+      timestamp: Math.floor(Date.now() / 1000),
+      cards: cards
+    });
+  } catch (error) {
+    logger.error('Error processing restock request', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Manual function to test API connectivity
+async function testGiftCardAPI(category = 'Gaming') {
+  try {
+    logger.info('Testing gift card API connectivity', { category });
+    
+    const response = await axios.get(`${GIFT_CARD_API_URL}/restock`, {
+      params: { category },
+      timeout: 10000
+    });
+    
+    logger.info('API test successful', { 
+      category,
+      status: response.status,
+      cardsReceived: response.data.cards?.length || 0
+    });
+    
+    return response.data;
+  } catch (error) {
+    logger.error('API test failed', { 
+      category,
+      error: error.message,
+      url: `${GIFT_CARD_API_URL}/restock?category=${category}`
+    });
+    throw error;
+  }
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
