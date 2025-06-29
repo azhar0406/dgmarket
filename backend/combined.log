@@ -23,3 +23,14 @@
 {"cardsReceived":2,"category":"Gaming","level":"info","message":"API test successful using local endpoint","note":"Cards have public prices and voucher codes","service":"dgmarket-backend","status":200,"timestamp":"2025-06-29T18:56:11.568Z"}
 {"level":"info","message":"Gift card API connectivity test passed - Updated for code encryption only","service":"dgmarket-backend","timestamp":"2025-06-29T18:56:11.568Z"}
 {"level":"info","message":"SIGINT received, shutting down gracefully","service":"dgmarket-backend","timestamp":"2025-06-29T18:56:42.630Z"}
+{"apiUrl":"http://localhost:8081","endpoints":{"categories":"http://localhost:8081/api/categories","health":"http://localhost:8081/health","restock":"http://localhost:8081/api/restock?category=Gaming","root":"http://localhost:8081/","testApi":"http://localhost:8081/api/test-api/Gaming","testEncryption":"http://localhost:8081/api/test-encryption"},"environment":"development","features":["Public gift card prices","Mock encrypted voucher codes","No external dependencies","API-first testing design"],"level":"info","message":"DG Market Backend server running on port 8081","mode":"Mock Encryption (Testing)","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:35.880Z","version":"2.0 - Simple Mock Version"}
+{"balance":"0.049332410222955289","chainId":"84532","level":"info","message":"Blockchain connection initialized","network":"unknown","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.406Z","walletAddress":"0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09"}
+{"apiServer":"running","blockchain":"connected","level":"info","message":"Server startup completed","mode":"Mock Encryption","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.407Z"}
+{"category":"Gaming","level":"info","message":"Testing gift card API connectivity","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.407Z"}
+{"codeLength":20,"level":"info","message":"Mock encrypting gift card voucher code","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.408Z"}
+{"level":"info","message":"Successfully mock encrypted gift card voucher code","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.408Z"}
+{"codeLength":20,"level":"info","message":"Mock encrypting gift card voucher code","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.409Z"}
+{"level":"info","message":"Successfully mock encrypted gift card voucher code","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.409Z"}
+{"cardsReceived":2,"category":"Gaming","level":"info","message":"API test successful","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.409Z"}
+{"level":"info","message":"Startup API test passed","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:38.409Z"}
+{"level":"info","message":"SIGINT received, shutting down gracefully","service":"dgmarket-backend","timestamp":"2025-06-29T19:30:43.752Z"}
