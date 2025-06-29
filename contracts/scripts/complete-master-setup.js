@@ -2,6 +2,7 @@
 // Complete master script that includes ALL configuration
 
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 // Import individual scripts
@@ -13,6 +14,9 @@ const { main: verifyContracts } = require('./verify-contracts');
 const { createWalletClient, createPublicClient, http } = require("viem");
 const { privateKeyToAccount } = require("viem/accounts");
 const { baseSepolia } = require("viem/chains");
+
+// Define contractAddresses at global scope so it's accessible to all functions
+let contractAddresses = {};
 
 async function checkPrerequisites() {
   console.log("🔍 Checking Prerequisites...");
@@ -79,7 +83,7 @@ async function configureSystemRoles() {
   const deploymentPath = "./ignition/deployments/chain-84532/deployed_addresses.json";
   const deployedAddresses = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
   
-  const contractAddresses = {
+  contractAddresses = {
     confidentialGiftCard: deployedAddresses["DGMarketCompleteModule#ConfidentialGiftCard"] || 
                           deployedAddresses["DGMarketFreshModule#ConfidentialGiftCard"],
     priceOracle: deployedAddresses["DGMarketCompleteModule#PriceOracle"] || 

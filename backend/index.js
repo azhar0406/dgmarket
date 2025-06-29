@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const { ethers } = require('ethers');
 const winston = require('winston');
 const axios = require('axios');
-const { createFhevmInstance } = require('fhevmjs/node');
 const { getViemChain, supportedChains } = require('@inco/js');
 const { Lightning } = require('@inco/js/lite');
 const { createWalletClient, createPublicClient, http, getAddress } = require('viem');
@@ -251,7 +250,11 @@ function getRandomCardsFromCategory(category, count = 2) {
 // Get Inco Lightning configuration
 function getIncoConfig() {
   // Use Base Sepolia for our implementation
-  return Lightning.latest('testnet', 84532); // Base Sepolia chainId
+  // Note: The template used Lightning.latest() but we need to adapt to the available version
+  return new Lightning({
+    chainId: 84532, // Base Sepolia chainId
+    network: 'testnet'
+  });
 }
 
 // Function to encrypt gift card value using Inco Lightning

@@ -1,5 +1,5 @@
-import { getAddress } from 'viem';
 import { Lightning } from '@inco/js/lite';
+import { getAddress } from 'viem';
 
 /**
  * Get the Inco Lightning configuration
@@ -7,7 +7,10 @@ import { Lightning } from '@inco/js/lite';
  */
 export const getIncoConfig = () => {
   // Use Base Sepolia for our implementation
-  return Lightning.latest('testnet', 84532); // Base Sepolia chainId
+  return new Lightning({
+    chainId: 84532, // Base Sepolia chainId
+    network: 'testnet'
+  });
 };
 
 /**
@@ -39,6 +42,23 @@ export async function encryptValue({
     console.error('Encryption error:', error);
     throw new Error(`Failed to encrypt: ${error.message}`);
   }
+}
+
+/**
+ * Helper function to create a wallet client from an ethers provider
+ * @param {Object} provider - Ethers provider
+ * @returns {Promise<Object>} - Viem compatible wallet client
+ */
+export async function createWalletClientFromEthers(provider) {
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  
+  return {
+    account: { address },
+    async signMessage({ message }) {
+      return signer.signMessage(message);
+    }
+  };
 }
 
 /**
@@ -81,23 +101,6 @@ export async function reEncryptValue({
     console.error('Reencryption error:', error);
     throw new Error(`Failed to reencrypt: ${error.message}`);
   }
-}
-
-/**
- * Helper function to create a wallet client from an ethers provider
- * @param {Object} provider - Ethers provider
- * @returns {Promise<Object>} - Viem compatible wallet client
- */
-export async function createWalletClientFromEthers(provider) {
-  const signer = await provider.getSigner();
-  const address = await signer.getAddress();
-  
-  return {
-    account: { address },
-    async signMessage({ message }) {
-      return signer.signMessage(message);
-    }
-  };
 }
 
 /**

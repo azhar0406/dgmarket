@@ -60,7 +60,7 @@ pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network ba
 After deployment, run the configuration script to set up the contracts:
 
 ```sh
-node scripts/configure-viem.js
+node scripts/complete-master-setup.js
 ```
 
 ### **7. Run Tests**
