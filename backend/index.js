@@ -35,11 +35,10 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Contract ABIs - Updated to match the new contract structure
+// Contract ABIs - Updated for new structure
 const chainlinkGiftCardManagerArtifact = require('./abis/ChainlinkGiftCardManager.json');
 const confidentialGiftCardArtifact = require('./abis/ConfidentialGiftCard.json');
 
-// Extract just the ABI from the artifacts
 const chainlinkGiftCardManagerABI = chainlinkGiftCardManagerArtifact.abi;
 const confidentialGiftCardABI = confidentialGiftCardArtifact.abi;
 
@@ -79,36 +78,36 @@ let giftCardContract;
 // Track processed requests to avoid duplicates
 const processedRequests = new Set();
 
-// Mock gift card data organized by categories
+// Mock gift card data organized by categories - NOW WITH VOUCHER CODES!
 const mockGiftCards = {
   "Food & Dining": [
     {
-      value: 25,
+      value: 25, // PUBLIC PRICE
       description: "McDonald's $25 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=McDonald%27s+$25",
       expiryDate: 0,
-      code: "MCD25-ABCD-1234"
+      code: "MCD25-ABCD-1234-XYZW" // WILL BE ENCRYPTED
     },
     {
       value: 50,
       description: "Starbucks $50 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Starbucks+$50",
       expiryDate: 0,
-      code: "SBX50-EFGH-5678"
+      code: "SBX50-EFGH-5678-UVWX"
     },
     {
       value: 100,
       description: "Uber Eats $100 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Uber+Eats+$100",
       expiryDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year from now
-      code: "UBE100-IJKL-9012"
+      code: "UBE100-IJKL-9012-QRST"
     },
     {
       value: 75,
       description: "DoorDash $75 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=DoorDash+$75",
       expiryDate: 0,
-      code: "DD75-MNOP-3456"
+      code: "DD75-MNOP-3456-LMNO"
     }
   ],
   "Shopping": [
@@ -117,28 +116,28 @@ const mockGiftCards = {
       description: "Amazon $100 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Amazon+$100",
       expiryDate: 0,
-      code: "AMZ100-QRST-7890"
+      code: "AMZ100-QRST-7890-PQRS"
     },
     {
       value: 50,
       description: "Target $50 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Target+$50",
       expiryDate: 0,
-      code: "TGT50-UVWX-1234"
+      code: "TGT50-UVWX-1234-TUVW"
     },
     {
       value: 200,
       description: "Best Buy $200 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Best+Buy+$200",
       expiryDate: Math.floor(Date.now() / 1000) + (730 * 24 * 60 * 60), // 2 years from now
-      code: "BBY200-YZAB-5678"
+      code: "BBY200-YZAB-5678-XYZA"
     },
     {
       value: 25,
       description: "Walmart $25 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Walmart+$25",
       expiryDate: 0,
-      code: "WMT25-CDEF-9012"
+      code: "WMT25-CDEF-9012-BCDE"
     }
   ],
   "Entertainment": [
@@ -147,28 +146,28 @@ const mockGiftCards = {
       description: "Netflix $15 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Netflix+$15",
       expiryDate: 0,
-      code: "NFX15-GHIJ-3456"
+      code: "NFX15-GHIJ-3456-FGHI"
     },
     {
       value: 25,
       description: "Spotify $25 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Spotify+$25",
       expiryDate: 0,
-      code: "SPT25-KLMN-7890"
+      code: "SPT25-KLMN-7890-JKLM"
     },
     {
       value: 50,
       description: "Apple iTunes $50 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=iTunes+$50",
       expiryDate: 0,
-      code: "ITN50-OPQR-1234"
+      code: "ITN50-OPQR-1234-NOPQ"
     },
     {
       value: 20,
       description: "Google Play $20 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Google+Play+$20",
       expiryDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year from now
-      code: "GPL20-STUV-5678"
+      code: "GPL20-STUV-5678-RSTU"
     }
   ],
   "Travel": [
@@ -177,21 +176,21 @@ const mockGiftCards = {
       description: "Airbnb $500 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Airbnb+$500",
       expiryDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year from now
-      code: "ABB500-WXYZ-9012"
+      code: "ABB500-WXYZ-9012-VWXY"
     },
     {
       value: 250,
       description: "Southwest Airlines $250 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Southwest+$250",
       expiryDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year from now
-      code: "SWA250-ABCD-3456"
+      code: "SWA250-ABCD-3456-ZABC"
     },
     {
       value: 100,
       description: "Uber $100 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Uber+$100",
       expiryDate: 0,
-      code: "UBR100-EFGH-7890"
+      code: "UBR100-EFGH-7890-DEFG"
     }
   ],
   "Gaming": [
@@ -200,28 +199,28 @@ const mockGiftCards = {
       description: "Steam $20 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Steam+$20",
       expiryDate: 0,
-      code: "STM20-IJKL-1234"
+      code: "STM20-IJKL-1234-HIJK"
     },
     {
       value: 50,
       description: "PlayStation Store $50 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=PlayStation+$50",
       expiryDate: 0,
-      code: "PSN50-MNOP-5678"
+      code: "PSN50-MNOP-5678-LMNO"
     },
     {
       value: 25,
       description: "Xbox $25 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Xbox+$25",
       expiryDate: 0,
-      code: "XBX25-QRST-9012"
+      code: "XBX25-QRST-9012-PQRS"
     },
     {
       value: 100,
       description: "Nintendo eShop $100 Gift Card",
       imageUrl: "https://via.placeholder.com/300x200?text=Nintendo+$100",
       expiryDate: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year from now
-      code: "NIN100-UVWX-3456"
+      code: "NIN100-UVWX-3456-TUVW"
     }
   ]
 };
@@ -253,20 +252,19 @@ function getRandomCardsFromCategory(category, count = 2) {
 
 // Get Inco Lightning configuration
 function getIncoConfig() {
-  // Use Base Sepolia for our implementation
-  // Note: The template used Lightning.latest() but we need to adapt to the available version
   return new Lightning({
     chainId: 84532, // Base Sepolia chainId
     network: 'testnet'
   });
 }
 
-// Function to encrypt gift card value using Inco Lightning
-async function encryptGiftCardValue(value) {
+// Function to encrypt gift card VOUCHER CODE using Inco Lightning
+async function encryptGiftCardCode(code) {
   try {
-    logger.info('Encrypting gift card value using latest Inco Lightning SDK', { value });
+    logger.info('Encrypting gift card voucher code using Inco Lightning SDK', { codeLength: code.length });
     
-    const valueBigInt = BigInt(value);
+    // Convert the code string to bytes for encryption
+    const codeBytes = ethers.utils.toUtf8Bytes(code);
     const checksummedAddress = getAddress(CONFIDENTIAL_GIFTCARD_ADDRESS);
     
     // Get Inco Lightning configuration
@@ -278,17 +276,17 @@ async function encryptGiftCardValue(value) {
       async signMessage({ message }) { return wallet.signMessage(message); }
     };
     
-    // Encrypt the value
-    const encryptedData = await incoConfig.encrypt(valueBigInt, {
+    // Encrypt the voucher code
+    const encryptedData = await incoConfig.encrypt(codeBytes, {
       accountAddress: wallet.address,
       dappAddress: checksummedAddress,
     });
     
-    logger.info('Successfully encrypted gift card value');
+    logger.info('Successfully encrypted gift card voucher code');
     return encryptedData;
   } catch (error) {
-    logger.error('Failed to encrypt gift card value', { error: error.message });
-    throw new Error(`Encryption failed: ${error.message}`);
+    logger.error('Failed to encrypt gift card voucher code', { error: error.message });
+    throw new Error(`Code encryption failed: ${error.message}`);
   }
 }
 
@@ -374,10 +372,11 @@ async function setupEventListeners() {
     });
     
     // Listen for GiftCardAdded events to track successful additions
-    chainlinkManager.on('GiftCardAdded', async (cardId, category, creator, event) => {
+    chainlinkManager.on('GiftCardAdded', async (cardId, category, value, creator, event) => {
       logger.info('Gift card added successfully', {
         cardId: cardId.toString(),
         category,
+        value: value.toString(),
         creator,
         blockNumber: event.blockNumber,
         transactionHash: event.transactionHash
@@ -452,7 +451,7 @@ async function processRestockFulfilled(requestId, category, responseData) {
   }
 }
 
-// Add gift card to contract
+// Add gift card to contract - UPDATED FOR NEW STRUCTURE
 async function addGiftCardToContract(card, category, requestId, cardIndex) {
   try {
     // Validate card data
@@ -467,33 +466,37 @@ async function addGiftCardToContract(card, category, requestId, cardIndex) {
       return;
     }
     
-    // Encrypt the card value using Inco Lightning
-    const encryptedValue = await encryptGiftCardValue(card.value);
+    // Encrypt the voucher code (NOT the value!)
+    const encryptedCode = await encryptGiftCardCode(card.code);
     
     // Prepare transaction parameters
+    const value = card.value; // PUBLIC VALUE
     const expiryDate = card.expiryDate || 0;
     
     logger.info('Adding gift card to contract', { 
       requestId, 
       category, 
-      description: card.description, 
+      description: card.description,
+      value: value, // Now public!
       expiryDate 
     });
     
-    // Call the backendAddGiftCard function on the ChainlinkGiftCardManager contract
+    // Call the backendAddGiftCard function with NEW SIGNATURE
     const tx = await chainlinkManager.backendAddGiftCard(
-      encryptedValue,
-      card.description,
-      card.imageUrl || "",
-      expiryDate,
-      category
+      value,              // PUBLIC VALUE (uint256)
+      encryptedCode,      // ENCRYPTED VOUCHER CODE (bytes)
+      card.description,   // PUBLIC DESCRIPTION
+      card.imageUrl || "", // PUBLIC IMAGE URL
+      expiryDate,         // PUBLIC EXPIRY DATE
+      category           // PUBLIC CATEGORY
     );
     
     const receipt = await tx.wait();
     
     logger.info('Gift card added successfully', { 
       requestId, 
-      category, 
+      category,
+      value: value,
       txHash: tx.hash, 
       blockNumber: receipt.blockNumber 
     });
@@ -514,8 +517,14 @@ async function addGiftCardToContract(card, category, requestId, cardIndex) {
 app.get('/', (req, res) => {
   res.status(200).json({ 
     status: 'ok',
-    message: 'DG Market Backend API',
+    message: 'DG Market Backend API - Updated for Code Encryption Only',
     timestamp: new Date().toISOString(),
+    features: [
+      'Public gift card prices',
+      'Encrypted voucher codes only',
+      'Transparent marketplace listings',
+      'Automated inventory restocking'
+    ],
     endpoints: {
       health: '/health',
       contracts: '/api/contracts',
@@ -530,6 +539,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'DG Market Backend',
+    version: '2.0 - Code Encryption Only',
     contracts: {
       chainlinkManager: CHAINLINK_MANAGER_ADDRESS,
       confidentialGiftCard: CONFIDENTIAL_GIFTCARD_ADDRESS
@@ -583,7 +593,8 @@ app.get('/api/test-api/:category?', async (req, res) => {
     res.status(200).json({
       success: true,
       category,
-      apiResponse: result
+      apiResponse: result,
+      note: 'Cards now have public prices and encrypted voucher codes'
     });
   } catch (error) {
     res.status(500).json({
@@ -607,13 +618,14 @@ app.get('/api/contracts', async (req, res) => {
       },
       wallet: {
         address: wallet.address,
-        balance: ethers.formatEther(balance)
+        balance: ethers.utils.formatEther(balance)
       },
       contracts: {
         chainlinkManager: CHAINLINK_MANAGER_ADDRESS,
         confidentialGiftCard: CONFIDENTIAL_GIFTCARD_ADDRESS
       },
-      processedRequests: processedRequests.size
+      processedRequests: processedRequests.size,
+      version: '2.0 - Code Encryption Only'
     });
   } catch (error) {
     res.status(500).json({
@@ -623,28 +635,7 @@ app.get('/api/contracts', async (req, res) => {
   }
 });
 
-// Get processed requests
-app.get('/api/processed-requests', (req, res) => {
-  res.status(200).json({
-    processedRequests: Array.from(processedRequests),
-    count: processedRequests.size
-  });
-});
-
-// Clear processed requests (for testing)
-app.post('/api/clear-processed', (req, res) => {
-  const count = processedRequests.size;
-  processedRequests.clear();
-  
-  logger.info('Cleared processed requests', { count });
-  
-  res.status(200).json({
-    success: true,
-    message: `Cleared ${count} processed requests`
-  });
-});
-
-// API route for gift card restocking
+// API route for gift card restocking - UPDATED
 app.get('/api/restock', async (req, res) => {
   try {
     const { category } = req.query;
@@ -665,7 +656,8 @@ app.get('/api/restock', async (req, res) => {
     // Log the request
     logger.info('Restock request received', { 
       category: targetCategory, 
-      cardCount: cards.length 
+      cardCount: cards.length,
+      note: 'Cards have public prices and voucher codes (codes will be encrypted before storage)'
     });
     
     // Return the cards in the format expected by the Chainlink function
@@ -673,7 +665,8 @@ app.get('/api/restock', async (req, res) => {
       success: true,
       category: targetCategory,
       timestamp: Math.floor(Date.now() / 1000),
-      cards: cards
+      cards: cards, // Contains public prices and voucher codes
+      note: 'Voucher codes will be encrypted when stored on-chain'
     });
   } catch (error) {
     logger.error('Error processing restock request', { error: error.message });
@@ -691,7 +684,6 @@ async function testGiftCardAPI(category = 'Gaming') {
     
     // First try to use the local API endpoint
     try {
-      // Use the local endpoint directly
       const localUrl = `http://localhost:${PORT}/api/restock?category=${category}`;
       logger.info('Attempting to connect to local API', { url: localUrl });
       
@@ -700,7 +692,8 @@ async function testGiftCardAPI(category = 'Gaming') {
       logger.info('API test successful using local endpoint', { 
         category,
         status: response.status,
-        cardsReceived: response.data.cards?.length || 0
+        cardsReceived: response.data.cards?.length || 0,
+        note: 'Cards have public prices and voucher codes'
       });
       
       return response.data;
@@ -716,7 +709,8 @@ async function testGiftCardAPI(category = 'Gaming') {
         success: true,
         category: category,
         timestamp: Math.floor(Date.now() / 1000),
-        cards: cards
+        cards: cards,
+        note: 'Direct function call - voucher codes will be encrypted when stored'
       };
       
       logger.info('API test successful (using direct function call)', { 
@@ -749,7 +743,13 @@ const server = app.listen(PORT, () => {
   const localApiUrl = `http://localhost:${PORT}`;
   logger.info(`DG Market Backend server running on port ${PORT}`, {
     apiUrl: localApiUrl,
+    version: '2.0 - Code Encryption Only',
     environment: process.env.NODE_ENV || 'development',
+    features: [
+      'Public gift card prices for transparent marketplace',
+      'Encrypted voucher codes for security',
+      'Automated Chainlink Functions integration'
+    ],
     endpoints: {
       health: `${localApiUrl}/health`,
       contracts: `${localApiUrl}/api/contracts`,
@@ -774,7 +774,7 @@ async function startServer() {
     // Test API connectivity on startup
     try {
       await testGiftCardAPI('Gaming');
-      logger.info('Gift card API connectivity test passed');
+      logger.info('Gift card API connectivity test passed - Updated for code encryption only');
     } catch (error) {
       logger.warn('Gift card API connectivity test failed - service will continue but restocking may not work', {
         error: error.message,
