@@ -14,7 +14,7 @@ import "./ConfidentialGiftCard.sol";
 /**
  * @title ChainlinkGiftCardManager
  * @dev Manages gift card inventory using Chainlink Functions for automated restocking
- * @notice Uses backend role to create gift cards from Chainlink Functions responses
+ * @notice Now creates gift cards with PUBLIC prices and ENCRYPTED voucher codes
  */
 contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, FunctionsClient {
     using FunctionsRequest for FunctionsRequest.Request;
@@ -78,7 +78,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     event InventoryUpdated(string category, uint256 newCount);
     event RestockRequested(bytes32 indexed requestId, string category);
     event RestockFulfilled(bytes32 indexed requestId, string category, bytes response);
-    event GiftCardAdded(uint256 indexed cardId, string category, address creator);
+    event GiftCardAdded(uint256 indexed cardId, string category, uint256 value, address creator);
     event ChainlinkFunctionUpdated(bytes32 donId, uint64 subscriptionId, uint32 gasLimit);
     
     // Custom errors
@@ -110,6 +110,98 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         _grantRole(ADMIN_ROLE, msg.sender);
         _grantRole(BACKEND_ROLE, address(this)); // Grant backend role to this contract
     }
+    
+    /**
+     * @dev Add a new gift card to inventory (admin only) - Updated for new structure
+     * @param value The PUBLIC value/price of the gift card
+     * @param encryptedCodeInput The encrypted voucher code
+     * @param description Public description of the gift card
+     * @param imageUrl Public image URL for the gift card
+     * @param expiryDate Expiry timestamp (0 for no expiry)
+     * @param category The category of the gift card
+     * @return cardId The ID of the newly created gift card
+     */
+    function addGiftCard(
+        uint256 value,
+        bytes memory encryptedCodeInput,
+        string calldata description,
+        string calldata imageUrl,
+        uint256 expiryDate,
+        string calldata category
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        onlyRole(ADMIN_ROLE) 
+        returns (uint256 cardId) 
+    {
+        if (!categoryInventory[category].active) revert InvalidCategory(category);
+        
+        // Create gift card in the gift card contract using admin function
+        cardId = giftCardContract.adminCreateGiftCard(
+            value,
+            encryptedCodeInput,
+            description,
+            category,
+            imageUrl,
+            expiryDate
+        );
+        
+        // Update inventory count
+        categoryInventory[category].count++;
+        
+        emit GiftCardAdded(cardId, category, value, msg.sender);
+        emit InventoryUpdated(category, categoryInventory[category].count);
+        
+        return cardId;
+    }
+    
+    /**
+     * @dev Backend role can add gift cards through this function (called by Chainlink Functions)
+     * @param value The PUBLIC value/price of the gift card
+     * @param encryptedCodeInput The encrypted voucher code
+     * @param description Public description of the gift card
+     * @param imageUrl Public image URL for the gift card
+     * @param expiryDate Expiry timestamp (0 for no expiry)
+     * @param category The category of the gift card
+     * @return cardId The ID of the newly created gift card
+     */
+    function backendAddGiftCard(
+        uint256 value,
+        bytes memory encryptedCodeInput,
+        string calldata description,
+        string calldata imageUrl,
+        uint256 expiryDate,
+        string calldata category
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        onlyRole(BACKEND_ROLE) 
+        returns (uint256 cardId) 
+    {
+        if (!categoryInventory[category].active) revert InvalidCategory(category);
+        
+        // Create gift card in the gift card contract using backend function
+        cardId = giftCardContract.backendCreateGiftCard(
+            value,
+            encryptedCodeInput,
+            description,
+            category,
+            imageUrl,
+            expiryDate
+        );
+        
+        // Update inventory count
+        categoryInventory[category].count++;
+        
+        emit GiftCardAdded(cardId, category, value, address(this));
+        emit InventoryUpdated(category, categoryInventory[category].count);
+        
+        return cardId;
+    }
+    
+    // ... (keep all existing functions like addCategory, updateCategoryThreshold, etc.)
     
     /**
      * @dev Add a new gift card category with inventory threshold
@@ -152,90 +244,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Add a new gift card to inventory (admin only)
-     * @param valueInput The encrypted value of the gift card
-     * @param description Public description of the gift card
-     * @param imageUrl Public image URL for the gift card
-     * @param expiryDate Expiry timestamp (0 for no expiry)
-     * @param category The category of the gift card
-     * @return cardId The ID of the newly created gift card
-     */
-    function addGiftCard(
-        bytes memory valueInput,
-        string calldata description,
-        string calldata imageUrl,
-        uint256 expiryDate,
-        string calldata category
-    ) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        onlyRole(ADMIN_ROLE) 
-        returns (uint256 cardId) 
-    {
-        if (!categoryInventory[category].active) revert InvalidCategory(category);
-        
-        // Create gift card in the gift card contract using admin function
-        cardId = giftCardContract.adminCreateGiftCard(
-            valueInput,
-            description,
-            category,
-            imageUrl,
-            expiryDate
-        );
-        
-        // Update inventory count
-        categoryInventory[category].count++;
-        
-        emit GiftCardAdded(cardId, category, msg.sender);
-        emit InventoryUpdated(category, categoryInventory[category].count);
-        
-        return cardId;
-    }
-    
-    /**
-     * @dev Backend role can add gift cards through this function (called by Chainlink Functions)
-     * @param valueInput The encrypted value of the gift card
-     * @param description Public description of the gift card
-     * @param imageUrl Public image URL for the gift card
-     * @param expiryDate Expiry timestamp (0 for no expiry)
-     * @param category The category of the gift card
-     * @return cardId The ID of the newly created gift card
-     */
-    function backendAddGiftCard(
-        bytes memory valueInput,
-        string calldata description,
-        string calldata imageUrl,
-        uint256 expiryDate,
-        string calldata category
-    ) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        onlyRole(BACKEND_ROLE) 
-        returns (uint256 cardId) 
-    {
-        if (!categoryInventory[category].active) revert InvalidCategory(category);
-        
-        // Create gift card in the gift card contract using backend function
-        cardId = giftCardContract.backendCreateGiftCard(
-            valueInput,
-            description,
-            category,
-            imageUrl,
-            expiryDate
-        );
-        
-        // Update inventory count
-        categoryInventory[category].count++;
-        
-        emit GiftCardAdded(cardId, category, address(this));
-        emit InventoryUpdated(category, categoryInventory[category].count);
-        
-        return cardId;
-    }
-    
-    /**
      * @dev Decrease inventory count when a gift card is sold
      * @param category The category of the sold gift card
      */
@@ -254,19 +262,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
                 // Request restock from API
                 requestRestockFromAPI(category);
             }
-        }
-    }
-    
-    /**
-     * @dev Check if inventory is below threshold and trigger restock if needed
-     * @param category The category to check
-     */
-    function checkAndTriggerRestock(string memory category) public {
-        CategoryInventory storage inventory = categoryInventory[category];
-        
-        if (inventory.active && inventory.count < inventory.threshold) {
-            // Trigger Chainlink Function to restock
-            requestRestockFromAPI(category);
         }
     }
     
@@ -334,7 +329,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         // Remove from pending requests
         for (uint i = 0; i < pendingRequests.length; i++) {
             if (pendingRequests[i] == requestId) {
-                // Replace with the last element and pop
                 pendingRequests[i] = pendingRequests[pendingRequests.length - 1];
                 pendingRequests.pop();
                 break;
@@ -343,7 +337,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         
         // Handle errors
         if (err.length > 0) {
-            // Log error and potentially retry
             return;
         }
         
@@ -387,28 +380,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Grant backend role to an address
-     * @param account The address to grant the role to
-     */
-    function grantBackendRole(address account) 
-        external 
-        onlyRole(DEFAULT_ADMIN_ROLE) 
-    {
-        _grantRole(BACKEND_ROLE, account);
-    }
-    
-    /**
-     * @dev Revoke backend role from an address
-     * @param account The address to revoke the role from
-     */
-    function revokeBackendRole(address account) 
-        external 
-        onlyRole(DEFAULT_ADMIN_ROLE) 
-    {
-        _revokeRole(BACKEND_ROLE, account);
-    }
-    
-    /**
      * @dev Get all categories
      * @return Array of category names
      */
@@ -447,16 +418,14 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Get request details
-     * @param requestId The request ID
-     * @return request The request details
+     * @dev Grant backend role to an address
+     * @param account The address to grant the role to
      */
-    function getRequestDetails(bytes32 requestId) 
+    function grantBackendRole(address account) 
         external 
-        view 
-        returns (ChainlinkRequest memory) 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
     {
-        return chainlinkRequests[requestId];
+        _grantRole(BACKEND_ROLE, account);
     }
     
     /**
