@@ -36,8 +36,12 @@ app.use(cors());
 app.use(express.json());
 
 // Contract ABIs - Updated to match the new contract structure
-const chainlinkGiftCardManagerABI = require('./abis/ChainlinkGiftCardManager.json');
-const confidentialGiftCardABI = require('./abis/ConfidentialGiftCard.json');
+const chainlinkGiftCardManagerArtifact = require('./abis/ChainlinkGiftCardManager.json');
+const confidentialGiftCardArtifact = require('./abis/ConfidentialGiftCard.json');
+
+// Extract just the ABI from the artifacts
+const chainlinkGiftCardManagerABI = chainlinkGiftCardManagerArtifact.abi;
+const confidentialGiftCardABI = confidentialGiftCardArtifact.abi;
 
 // Environment variables
 const PORT = process.env.PORT || 3001;
@@ -291,7 +295,8 @@ async function encryptGiftCardValue(value) {
 // Initialize blockchain connection
 async function initBlockchain() {
   try {
-    provider = new ethers.JsonRpcProvider(RPC_URL);
+    // Fix: Use ethers v5.7.2 provider syntax instead of v6
+    provider = new ethers.providers.JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIVATE_KEY, provider);
     
     chainlinkManager = new ethers.Contract(
@@ -308,19 +313,19 @@ async function initBlockchain() {
     
     // Test connection
     const network = await provider.getNetwork();
-    const balance = await wallet.provider.getBalance(wallet.address);
+    const balance = await provider.getBalance(wallet.address);
     
     logger.info('Blockchain connection initialized', {
       network: network.name,
       chainId: network.chainId.toString(),
       walletAddress: wallet.address,
-      balance: ethers.formatEther(balance),
+      balance: ethers.utils.formatEther(balance),
       chainlinkManagerAddress: CHAINLINK_MANAGER_ADDRESS,
       confidentialGiftCardAddress: CONFIDENTIAL_GIFTCARD_ADDRESS
     });
   } catch (error) {
     logger.error('Failed to initialize blockchain connection', { error: error.message });
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -729,6 +734,9 @@ async function startServer() {
           testApi: `http://localhost:${PORT}/api/test-api/:category`
         }
       });
+    }).on('error', (err) => {
+      logger.error('Failed to start server', { error: err.message });
+      process.exit(1);
     });
   } catch (error) {
     logger.error('Failed to start server', { error: error.message });
