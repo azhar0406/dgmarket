@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
  * @title ConfidentialGiftCard
  * @dev A confidential gift card contract using Inco Lightning's TEE technology
  * @notice This contract enables privacy-preserving gift card operations with enhanced security
+ * @notice Only admin and backend roles can create gift cards
  */
 contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     
@@ -32,6 +33,8 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     event GiftCardTransferred(uint256 indexed cardId, address indexed from, address indexed to);
     event UserBalanceDecrypted(address indexed user, uint256 decryptedAmount);
     event GiftCardValueDecrypted(uint256 indexed cardId, address indexed user, uint256 decryptedValue);
+    event StockThresholdReached(string category, uint256 currentStock, uint256 threshold);
+    event RestockRequestFailed(string category);
     
     // Encrypted mappings
     mapping(address => euint256) private balances;
@@ -48,6 +51,13 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     
     // Card counter
     uint256 private nextCardId;
+    
+    // Category inventory tracking
+    mapping(string => uint256) public categoryStock;
+    mapping(string => uint256) public categoryThresholds;
+    
+    // ChainlinkGiftCardManager contract reference
+    address public chainlinkGiftCardManager;
     
     // Modifiers
     modifier validCardId(uint256 cardId) {
@@ -78,57 +88,10 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Creates a new gift card with encrypted value
-     * @param valueInput The encrypted value of the gift card
-     * @param description Public description of the gift card
-     * @param imageUrl Public image URL for the gift card
-     * @param expiryDate Expiry timestamp (0 for no expiry)
-     * @return cardId The ID of the newly created gift card
-     */
-    function createGiftCard(
-        bytes memory valueInput,
-        string calldata description,
-        string calldata imageUrl,
-        uint256 expiryDate
-    ) external whenNotPaused nonReentrant returns (uint256 cardId) {
-        require(bytes(description).length > 0, "Description cannot be empty");
-        require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
-        
-        // Convert encrypted input to euint256
-        euint256 value = e.newEuint256(valueInput, msg.sender);
-        
-        // Assign card ID
-        cardId = nextCardId;
-        nextCardId++;
-        
-        // Store encrypted gift card data
-        giftCardValues[cardId] = value;
-        giftCardActive[cardId] = e.asEbool(true);
-        giftCardOwners[cardId] = msg.sender; // Regular address assignment
-        
-        // Allow access to the encrypted values
-        e.allow(giftCardValues[cardId], address(this));
-        e.allow(giftCardValues[cardId], msg.sender);
-        e.allow(giftCardActive[cardId], address(this));
-        e.allow(giftCardActive[cardId], msg.sender);
-        
-        // Store public metadata
-        giftCardMetadata[cardId] = GiftCardMetadata({
-            description: description,
-            imageUrl: imageUrl,
-            expiryDate: expiryDate,
-            creator: msg.sender,
-            exists: true
-        });
-        
-        emit GiftCardCreated(cardId, msg.sender, description);
-        return cardId;
-    }
-    
-    /**
      * @dev Creates a new gift card with encrypted value (admin only)
      * @param valueInput The encrypted value of the gift card
      * @param description Public description of the gift card
+     * @param category Category of the gift card
      * @param imageUrl Public image URL for the gift card
      * @param expiryDate Expiry timestamp (0 for no expiry)
      * @return cardId The ID of the newly created gift card
@@ -136,47 +99,21 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     function adminCreateGiftCard(
         bytes memory valueInput,
         string calldata description,
+        string calldata category,
         string calldata imageUrl,
         uint256 expiryDate
     ) external whenNotPaused nonReentrant onlyRole(ADMIN_ROLE) returns (uint256 cardId) {
         require(bytes(description).length > 0, "Description cannot be empty");
         require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
         
-        // Convert encrypted input to euint256
-        euint256 value = e.newEuint256(valueInput, msg.sender);
-        
-        // Assign card ID
-        cardId = nextCardId;
-        nextCardId++;
-        
-        // Store encrypted gift card data
-        giftCardValues[cardId] = value;
-        giftCardActive[cardId] = e.asEbool(true);
-        giftCardOwners[cardId] = msg.sender; // Regular address assignment
-        
-        // Allow access to the encrypted values
-        e.allow(giftCardValues[cardId], address(this));
-        e.allow(giftCardValues[cardId], msg.sender);
-        e.allow(giftCardActive[cardId], address(this));
-        e.allow(giftCardActive[cardId], msg.sender);
-        
-        // Store public metadata
-        giftCardMetadata[cardId] = GiftCardMetadata({
-            description: description,
-            imageUrl: imageUrl,
-            expiryDate: expiryDate,
-            creator: msg.sender,
-            exists: true
-        });
-        
-        emit GiftCardCreated(cardId, msg.sender, description);
-        return cardId;
+        return _createGiftCard(valueInput, description, category, imageUrl, expiryDate, msg.sender);
     }
     
     /**
      * @dev Creates a new gift card with encrypted value (backend only)
      * @param valueInput The encrypted value of the gift card
      * @param description Public description of the gift card
+     * @param category Category of the gift card
      * @param imageUrl Public image URL for the gift card
      * @param expiryDate Expiry timestamp (0 for no expiry)
      * @return cardId The ID of the newly created gift card
@@ -184,14 +121,38 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     function backendCreateGiftCard(
         bytes memory valueInput,
         string calldata description,
+        string calldata category,
         string calldata imageUrl,
         uint256 expiryDate
     ) external whenNotPaused nonReentrant onlyRole(BACKEND_ROLE) returns (uint256 cardId) {
-        require(bytes(description).length > 0, "Description cannot be empty");
-        require(expiryDate == 0 || expiryDate > block.timestamp, "Invalid expiry date");
+        cardId = _createGiftCard(valueInput, description, category, imageUrl, expiryDate, msg.sender);
         
+        // Update category stock
+        updateCategoryStock(category, true);
+        
+        return cardId;
+    }
+    
+    /**
+     * @dev Internal function to create gift cards
+     * @param valueInput The encrypted value of the gift card
+     * @param description Public description of the gift card
+     * @param category Category of the gift card
+     * @param imageUrl Public image URL for the gift card
+     * @param expiryDate Expiry timestamp (0 for no expiry)
+     * @param creator The address creating the gift card
+     * @return cardId The ID of the newly created gift card
+     */
+    function _createGiftCard(
+        bytes memory valueInput,
+        string calldata description,
+        string calldata category,
+        string calldata imageUrl,
+        uint256 expiryDate,
+        address creator
+    ) internal returns (uint256 cardId) {
         // Convert encrypted input to euint256
-        euint256 value = e.newEuint256(valueInput, msg.sender);
+        euint256 value = e.newEuint256(valueInput, creator);
         
         // Assign card ID
         cardId = nextCardId;
@@ -200,24 +161,24 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
         // Store encrypted gift card data
         giftCardValues[cardId] = value;
         giftCardActive[cardId] = e.asEbool(true);
-        giftCardOwners[cardId] = msg.sender; // Regular address assignment
+        giftCardOwners[cardId] = creator; // Regular address assignment
         
         // Allow access to the encrypted values
         e.allow(giftCardValues[cardId], address(this));
-        e.allow(giftCardValues[cardId], msg.sender);
+        e.allow(giftCardValues[cardId], creator);
         e.allow(giftCardActive[cardId], address(this));
-        e.allow(giftCardActive[cardId], msg.sender);
+        e.allow(giftCardActive[cardId], creator);
         
         // Store public metadata
         giftCardMetadata[cardId] = GiftCardMetadata({
             description: description,
             imageUrl: imageUrl,
             expiryDate: expiryDate,
-            creator: msg.sender,
+            creator: creator,
             exists: true
         });
         
-        emit GiftCardCreated(cardId, msg.sender, description);
+        emit GiftCardCreated(cardId, creator, description);
         return cardId;
     }
     
@@ -256,6 +217,9 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
         e.allow(balances[msg.sender], msg.sender);
         e.allow(giftCardActive[cardId], address(this));
         e.allow(giftCardActive[cardId], msg.sender);
+        
+        // Update category stock
+        updateCategoryStock(giftCardMetadata[cardId].description, false);
         
         emit GiftCardRedeemed(cardId, msg.sender);
         return success;
@@ -531,6 +495,55 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
     }
     
     /**
+     * @dev Set the ChainlinkGiftCardManager address
+     * @param _manager Address of the ChainlinkGiftCardManager contract
+     */
+    function setChainlinkGiftCardManager(address _manager) external onlyRole(ADMIN_ROLE) {
+        require(_manager != address(0), "Invalid manager address");
+        chainlinkGiftCardManager = _manager;
+    }
+    
+    /**
+     * @dev Set threshold for a category
+     * @param category The gift card category
+     * @param threshold The threshold value
+     */
+    function setCategoryThreshold(string calldata category, uint256 threshold) external onlyRole(ADMIN_ROLE) {
+        categoryThresholds[category] = threshold;
+    }
+    
+    /**
+     * @dev Update category stock when a gift card is created or redeemed
+     * @param category The gift card category
+     * @param isCreation Whether this is a creation (true) or redemption (false)
+     */
+    function updateCategoryStock(string memory category, bool isCreation) internal {
+        if (isCreation) {
+            categoryStock[category]++;
+        } else if (categoryStock[category] > 0) {
+            categoryStock[category]--;
+            
+            // Check if stock is below threshold
+            if (categoryStock[category] <= categoryThresholds[category]) {
+                emit StockThresholdReached(category, categoryStock[category], categoryThresholds[category]);
+                
+                // If ChainlinkGiftCardManager is set, notify it
+                if (chainlinkGiftCardManager != address(0)) {
+                    // Call the ChainlinkGiftCardManager to request restock
+                    (bool success, ) = chainlinkGiftCardManager.call(
+                        abi.encodeWithSignature("requestRestockFromAPI(string)", category)
+                    );
+                    
+                    // Log the result but don't revert if the call fails
+                    if (!success) {
+                        emit RestockRequestFailed(category);
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
      * @dev Emergency pause function
      */
     function pause() external onlyRole(ADMIN_ROLE) {
@@ -542,5 +555,20 @@ contract ConfidentialGiftCard is AccessControl, ReentrancyGuard, Pausable {
      */
     function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
+    }
+    
+    /**
+     * @dev Allow a user to view their gift card's encrypted value
+     * @param cardId The ID of the gift card
+     * @return encryptedValue The encrypted gift card value
+     */
+    function getEncryptedGiftCardValue(
+        uint256 cardId
+    ) external view validCardId(cardId) returns (euint256) {
+        // Verify that the caller is the owner of the gift card
+        require(giftCardOwners[cardId] == msg.sender, "Not card owner");
+        
+        // Return the encrypted gift card value directly
+        return giftCardValues[cardId];
     }
 }

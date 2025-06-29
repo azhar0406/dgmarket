@@ -1,0 +1,12 @@
+{
+  "subscriptionId": "385",
+  "owner": "0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09",
+  "createdAt": "2025-06-29T12:57:18.737Z",
+  "fundAmount": "1.0",
+  "chainlinkManagerAddress": "0x82d006739e1cab444A9C55968722F3908267DfE5",
+  "txHashes": {
+    "create": "0x4f5acca03cd48cd4f04d56bf72cd25028903b2887ae3645fc5abd129ef2777cc",
+    "fund": "0x02a37113da78e529c30b01dcdab6ab5ebed3e121d33d3b2b41b8ed8239cfc593",
+    "addConsumer": "0x30d338c80b4d661b4d781a552c85738368a5a87702b9aa9c7e392e62a966b773"
+  }
+}

@@ -4,7 +4,7 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
-  console.log("🚀 Deploying DG Market Complete System...");
+  console.log("🚀 Deploying DG Market Complete System with Enhanced Security...");
 
   // 1. Deploy ConfidentialGiftCard
   const confidentialGiftCard = m.contract("ConfidentialGiftCard");
@@ -19,13 +19,38 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
     marketplaceFeePercent
   ]);
 
-  // 4. Deploy AgentCoordinator with simplified constructor
-  const agentCoordinator = m.contract("AgentCoordinator", [
+  // 4. Deploy ChainlinkGiftCardManager with dependencies
+  // Get Chainlink Functions configuration for Base Sepolia
+  const chainlinkFunctionsRouter = process.env.CHAINLINK_FUNCTIONS_ROUTER || "0xf9B8fc078197181C841c296C876945aaa425B278"; // Base Sepolia Functions Router
+  
+  // Fixed DON ID - properly formatted bytes32 (64 characters)
+  const chainlinkDonId = process.env.CHAINLINK_DON_ID || "0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000"; // fun-base-sepolia-1 (32 bytes)
+  
+  const chainlinkSubscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID || "0"; // Replace with your actual subscription ID
+  
+  console.log("Chainlink Configuration:");
+  console.log("- Router:", chainlinkFunctionsRouter);
+  console.log("- DON ID:", chainlinkDonId);
+  console.log("- Subscription ID:", chainlinkSubscriptionId);
+  
+  // Deploy ChainlinkGiftCardManager
+  const chainlinkGiftCardManager = m.contract("ChainlinkGiftCardManager", [
     dgMarketCore,
-    priceOracle
+    confidentialGiftCard,
+    chainlinkFunctionsRouter,
+    chainlinkDonId,
+    chainlinkSubscriptionId
   ]);
 
-  // 5. Configuration calls (these will be executed after deployment)
+  // 5. Configure roles and permissions
+  
+  // Grant BACKEND_ROLE to ChainlinkGiftCardManager in ConfidentialGiftCard
+  // This allows ChainlinkGiftCardManager to create gift cards from Chainlink Functions
+  m.call(confidentialGiftCard, "grantBackendRole", [chainlinkGiftCardManager], {
+    id: "GrantBackendRoleToChainlinkManager"
+  });
+
+  // 6. Configuration calls (these will be executed after deployment)
   
   // Configure supported tokens for Base Sepolia
   const usdcAddress = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
@@ -41,7 +66,7 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
     id: "AddUSDCPriceFeed"
   }); // 1 hour heartbeat
   
-  // Add default categories with unique IDs
+  // Add default categories to DGMarketCore with unique IDs
   m.call(dgMarketCore, "addCategory", ["Food & Dining"], {
     id: "AddCategoryFoodDining"
   });
@@ -58,47 +83,29 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
     id: "AddCategoryGaming"
   });
 
-  // Get deployer account for agent setup
-  const deployer = m.getAccount(0);
-
-  // Register agents with unique IDs (using deployer as operator for demo)
-  const registerMonitoring = m.call(agentCoordinator, "registerAgent", [0, deployer], {
-    id: "RegisterMonitoringAgent"
-  }); // MONITORING
-  const registerRestocking = m.call(agentCoordinator, "registerAgent", [1, deployer], {
-    id: "RegisterRestockingAgent"
-  }); // RESTOCKING
-  const registerTrading = m.call(agentCoordinator, "registerAgent", [2, deployer], {
-    id: "RegisterTradingAgent"
-  }); // TRADING
-  const registerPriceDiscovery = m.call(agentCoordinator, "registerAgent", [3, deployer], {
-    id: "RegisterPriceDiscoveryAgent"
-  }); // PRICE_DISCOVERY
-
-  // Activate agents with unique IDs and dependencies on registration
-  m.call(agentCoordinator, "updateAgentStatus", [0, 1], {
-    id: "ActivateMonitoringAgent",
-    after: [registerMonitoring]
-  }); // MONITORING -> ACTIVE
-  m.call(agentCoordinator, "updateAgentStatus", [1, 1], {
-    id: "ActivateRestockingAgent", 
-    after: [registerRestocking]
-  }); // RESTOCKING -> ACTIVE
-  m.call(agentCoordinator, "updateAgentStatus", [2, 1], {
-    id: "ActivateTradingAgent",
-    after: [registerTrading]
-  }); // TRADING -> ACTIVE
-  m.call(agentCoordinator, "updateAgentStatus", [3, 1], {
-    id: "ActivatePriceDiscoveryAgent",
-    after: [registerPriceDiscovery]
-  }); // PRICE_DISCOVERY -> ACTIVE
+  // Add categories to ChainlinkGiftCardManager with thresholds
+  m.call(chainlinkGiftCardManager, "addCategory", ["Food & Dining", 5], {
+    id: "AddChainlinkCategoryFoodDining"
+  });
+  m.call(chainlinkGiftCardManager, "addCategory", ["Shopping", 5], {
+    id: "AddChainlinkCategoryShopping"
+  });
+  m.call(chainlinkGiftCardManager, "addCategory", ["Entertainment", 5], {
+    id: "AddChainlinkCategoryEntertainment"
+  });
+  m.call(chainlinkGiftCardManager, "addCategory", ["Travel", 3], {
+    id: "AddChainlinkCategoryTravel"
+  });
+  m.call(chainlinkGiftCardManager, "addCategory", ["Gaming", 5], {
+    id: "AddChainlinkCategoryGaming"
+  });
 
   // Return only contract futures - no plain objects allowed
   return { 
     confidentialGiftCard, 
     priceOracle, 
-    dgMarketCore, 
-    agentCoordinator
+    dgMarketCore,
+    chainlinkGiftCardManager
   };
 });
 

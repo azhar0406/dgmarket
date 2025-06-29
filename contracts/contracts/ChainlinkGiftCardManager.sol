@@ -14,7 +14,7 @@ import "./ConfidentialGiftCard.sol";
 /**
  * @title ChainlinkGiftCardManager
  * @dev Manages gift card inventory using Chainlink Functions for automated restocking
- * @notice Replaces AI-agent system with Chainlink Functions for API integration
+ * @notice Uses backend role to create gift cards from Chainlink Functions responses
  */
 contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, FunctionsClient {
     using FunctionsRequest for FunctionsRequest.Request;
@@ -35,7 +35,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     // JavaScript source code for Chainlink Functions
     string private constant SOURCE_CODE = 
         "const category = args[0];"
-        "const apiUrl = `https://api.dgmarket.com/restock?category=${category}`;"
+        "const apiUrl = `http://13.235.164.47:8081/api/restock?category=${category}`;"
         "const restockRequest = Functions.makeHttpRequest({"
         "  url: apiUrl,"
         "  method: 'GET',"
@@ -89,14 +89,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     error UnauthorizedFulfillment(address sender);
     error EmptyResponse();
     
-    /**
-     * @dev Constructor initializes the contract with required addresses and configurations
-     * @param _marketContract Address of the DGMarketCore contract
-     * @param _giftCardContract Address of the ConfidentialGiftCard contract
-     * @param _router Address of the Chainlink Functions Router
-     * @param _donId DON ID for Chainlink Functions
-     * @param _subscriptionId Chainlink Functions subscription ID
-     */
     constructor(
         address _marketContract,
         address _giftCardContract,
@@ -116,6 +108,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(BACKEND_ROLE, address(this)); // Grant backend role to this contract
     }
     
     /**
@@ -159,7 +152,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Add a new gift card to inventory
+     * @dev Add a new gift card to inventory (admin only)
      * @param valueInput The encrypted value of the gift card
      * @param description Public description of the gift card
      * @param imageUrl Public image URL for the gift card
@@ -182,10 +175,11 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     {
         if (!categoryInventory[category].active) revert InvalidCategory(category);
         
-        // Create gift card in the gift card contract
-        cardId = giftCardContract.createGiftCard(
+        // Create gift card in the gift card contract using admin function
+        cardId = giftCardContract.adminCreateGiftCard(
             valueInput,
             description,
+            category,
             imageUrl,
             expiryDate
         );
@@ -200,7 +194,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Backend role can add gift cards through this function
+     * @dev Backend role can add gift cards through this function (called by Chainlink Functions)
      * @param valueInput The encrypted value of the gift card
      * @param description Public description of the gift card
      * @param imageUrl Public image URL for the gift card
@@ -223,10 +217,11 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     {
         if (!categoryInventory[category].active) revert InvalidCategory(category);
         
-        // Create gift card in the gift card contract
-        cardId = giftCardContract.createGiftCard(
+        // Create gift card in the gift card contract using backend function
+        cardId = giftCardContract.backendCreateGiftCard(
             valueInput,
             description,
+            category,
             imageUrl,
             expiryDate
         );
@@ -234,7 +229,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         // Update inventory count
         categoryInventory[category].count++;
         
-        emit GiftCardAdded(cardId, category, msg.sender);
+        emit GiftCardAdded(cardId, category, address(this));
         emit InventoryUpdated(category, categoryInventory[category].count);
         
         return cardId;
@@ -254,8 +249,11 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
             categoryInventory[category].count--;
             emit InventoryUpdated(category, categoryInventory[category].count);
             
-            // Check if we need to restock
-            checkAndTriggerRestock(category);
+            // Check if inventory is below threshold and trigger restock if needed
+            if (categoryInventory[category].count <= categoryInventory[category].threshold) {
+                // Request restock from API
+                requestRestockFromAPI(category);
+            }
         }
     }
     
@@ -315,7 +313,7 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
     }
     
     /**
-     * @dev Callback function for Chainlink Functions
+     * @dev Fulfillment callback for Chainlink Functions
      * @param requestId The request ID
      * @param response The response from the API
      * @param err Any error that occurred
@@ -353,9 +351,6 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, ReentrancyGuard, F
         
         // Emit event with the response for backend monitoring
         emit RestockFulfilled(requestId, request.category, response);
-        
-        // The backend should monitor RestockFulfilled events and call backendAddGiftCard
-        // with the gift card data from the response
     }
     
     /**

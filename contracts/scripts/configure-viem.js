@@ -1,4 +1,4 @@
-const { createWalletClient, createPublicClient, http, getAddress, encodeBytes32String } = require("viem");
+const { createWalletClient, createPublicClient, http, getAddress } = require("viem");
 const { privateKeyToAccount } = require("viem/accounts");
 const { baseSepolia } = require("viem/chains");
 const fs = require("fs");
@@ -8,9 +8,10 @@ require("dotenv").config();
 // Import ABIs
 const dgMarketCoreAbi = require("../artifacts/contracts/DGMarketCore.sol/DGMarketCore.json");
 const priceOracleAbi = require("../artifacts/contracts/PriceOracle.sol/PriceOracle.json");
-const agentCoordinatorAbi = require("../artifacts/contracts/AgentCoordinator.sol/AgentCoordinator.json");
+const chainlinkGiftCardManagerAbi = require("../artifacts/contracts/ChainlinkGiftCardManager.sol/ChainlinkGiftCardManager.json");
+const confidentialGiftCardAbi = require("../artifacts/contracts/ConfidentialGiftCard.sol/ConfidentialGiftCard.json");
 
-// Setup wallet and client (same as your wallet.ts but in JS)
+// Setup wallet and client
 const PRIVATE_KEY_ENV = process.env.PRIVATE_KEY_BASE_SEPOLIA;
 if (!PRIVATE_KEY_ENV) {
   throw new Error("Missing PRIVATE_KEY_BASE_SEPOLIA in .env file");
@@ -45,7 +46,7 @@ const wallet = createWalletClient({
 });
 
 async function main() {
-  console.log("🔧 Configuring DG Market System with Viem...");
+  console.log("🔧 Configuring DG Market System with Enhanced Security...");
 
   // Get deployed contract addresses from Ignition deployment
   const deploymentPath = "./ignition/deployments/chain-84532";
@@ -68,16 +69,16 @@ async function main() {
         dgMarketCore: deployedAddresses["DGMarketDeployModule#DGMarketCore"] || 
                      deployedAddresses["DGMarketFreshModule#DGMarketCore"] ||
                      deployedAddresses["DGMarketCompleteModule#DGMarketCore"],
-        agentCoordinator: deployedAddresses["DGMarketDeployModule#AgentCoordinator"] || 
-                         deployedAddresses["DGMarketFreshModule#AgentCoordinator"] ||
-                         deployedAddresses["DGMarketCompleteModule#AgentCoordinator"]
+        chainlinkGiftCardManager: deployedAddresses["DGMarketDeployModule#ChainlinkGiftCardManager"] || 
+                                 deployedAddresses["DGMarketFreshModule#ChainlinkGiftCardManager"] ||
+                                 deployedAddresses["DGMarketCompleteModule#ChainlinkGiftCardManager"]
       };
       
       console.log("📍 Found deployed contracts:");
       console.log("- ConfidentialGiftCard:", contractAddresses.confidentialGiftCard);
       console.log("- PriceOracle:", contractAddresses.priceOracle);
       console.log("- DGMarketCore:", contractAddresses.dgMarketCore);
-      console.log("- AgentCoordinator:", contractAddresses.agentCoordinator);
+      console.log("- ChainlinkGiftCardManager:", contractAddresses.chainlinkGiftCardManager);
       
     } else {
       console.error("❌ No deployed addresses found.");
@@ -102,59 +103,152 @@ async function main() {
 
   // Configuration data
   const config = {
-    usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia USDC
-    usdcPriceFeed: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165", // USDC/USD price feed
-    categories: ["Food & Dining", "Shopping", "Entertainment", "Travel", "Gaming"]
+    categories: ["Food & Dining", "Shopping", "Entertainment", "Travel", "Gaming"],
+    giftCardThresholds: {
+      "Food & Dining": 5,
+      "Shopping": 5,
+      "Entertainment": 5,
+      "Travel": 3,
+      "Gaming": 5
+    }
   };
 
   try {
-    // 1. Configure supported tokens
-    console.log("\n1️⃣ Adding supported tokens...");
+    // 1. Configure roles and permissions
+    console.log("\n1️⃣ Configuring roles and permissions...");
     
-    try {
-      // Check if token is already supported
-      const isTokenSupported = await publicClient.readContract({
-        address: getAddress(contractAddresses.dgMarketCore),
-        abi: dgMarketCoreAbi.abi,
-        functionName: "supportedTokens",
-        args: [config.usdcAddress],
-      });
-
-      if (!isTokenSupported) {
-        const addTokenTxHash = await wallet.writeContract({
-          address: contractAddresses.dgMarketCore,
-          abi: dgMarketCoreAbi.abi,
-          functionName: "addSupportedToken",
-          args: [config.usdcAddress, config.usdcPriceFeed],
+    if (contractAddresses.chainlinkGiftCardManager && contractAddresses.confidentialGiftCard) {
+      // Grant BACKEND_ROLE to ChainlinkGiftCardManager in ConfidentialGiftCard
+      try {
+        const backendRole = await publicClient.readContract({
+          address: contractAddresses.confidentialGiftCard,
+          abi: confidentialGiftCardAbi.abi,
+          functionName: "BACKEND_ROLE",
         });
         
-        await publicClient.waitForTransactionReceipt({ hash: addTokenTxHash });
-        console.log("✅ Added USDC as supported token");
-      } else {
-        console.log("✅ USDC already supported");
+        const grantBackendRoleTxHash = await wallet.writeContract({
+          address: contractAddresses.confidentialGiftCard,
+          abi: confidentialGiftCardAbi.abi,
+          functionName: "grantBackendRole",
+          args: [contractAddresses.chainlinkGiftCardManager],
+        });
+        
+        await publicClient.waitForTransactionReceipt({ hash: grantBackendRoleTxHash });
+        console.log(`✅ Granted BACKEND_ROLE to ChainlinkGiftCardManager in ConfidentialGiftCard`);
+      } catch (error) {
+        console.log(`⚠️ Backend role configuration issue:`, error.message);
       }
+      
+      // Grant ADMIN_ROLE to deployer in both contracts
+      try {
+        const adminRole = await publicClient.readContract({
+          address: contractAddresses.confidentialGiftCard,
+          abi: confidentialGiftCardAbi.abi,
+          functionName: "ADMIN_ROLE",
+        });
+        
+        const grantAdminRoleTxHash = await wallet.writeContract({
+          address: contractAddresses.confidentialGiftCard,
+          abi: confidentialGiftCardAbi.abi,
+          functionName: "grantAdminRole",
+          args: [wallet.account.address],
+        });
+        
+        await publicClient.waitForTransactionReceipt({ hash: grantAdminRoleTxHash });
+        console.log(`✅ Granted ADMIN_ROLE to deployer in ConfidentialGiftCard`);
+      } catch (error) {
+        console.log(`⚠️ Admin role configuration issue:`, error.message);
+      }
+    }
+
+    // 2. Configure gift card categories in ChainlinkGiftCardManager
+    if (contractAddresses.chainlinkGiftCardManager) {
+      console.log("\n2️⃣ Configuring ChainlinkGiftCardManager categories...");
+      
+      for (const category of config.categories) {
+        try {
+          // Add category with threshold to ChainlinkGiftCardManager
+          const threshold = config.giftCardThresholds[category] || 5; // Default threshold is 5
+          
+          const addCategoryTxHash = await wallet.writeContract({
+            address: contractAddresses.chainlinkGiftCardManager,
+            abi: chainlinkGiftCardManagerAbi.abi,
+            functionName: "addCategory",
+            args: [category, threshold],
+          });
+          
+          await publicClient.waitForTransactionReceipt({ hash: addCategoryTxHash });
+          console.log(`✅ Added category ${category} with threshold ${threshold} to ChainlinkGiftCardManager`);
+        } catch (error) {
+          console.log(`⚠️ Category ${category} configuration issue:`, error.message);
+        }
+      }
+      
+      // Grant ADMIN_ROLE to the deployer account in ChainlinkGiftCardManager
+      try {
+        const adminRole = await publicClient.readContract({
+          address: contractAddresses.chainlinkGiftCardManager,
+          abi: chainlinkGiftCardManagerAbi.abi,
+          functionName: "ADMIN_ROLE",
+        });
+        
+        const grantRoleTxHash = await wallet.writeContract({
+          address: contractAddresses.chainlinkGiftCardManager,
+          abi: chainlinkGiftCardManagerAbi.abi,
+          functionName: "grantRole",
+          args: [adminRole, wallet.account.address],
+        });
+        
+        await publicClient.waitForTransactionReceipt({ hash: grantRoleTxHash });
+        console.log(`✅ Granted ADMIN_ROLE to ${wallet.account.address} in ChainlinkGiftCardManager`);
+      } catch (error) {
+        console.log(`⚠️ Role configuration issue:`, error.message);
+      }
+    }
+
+    // 3. Configure supported tokens
+    console.log("\n3️⃣ Configuring supported tokens...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+
+    const usdcAddress = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
+    const usdcPriceFeed = "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165"; // USDC/USD price feed
+
+    try {
+      const addTokenTxHash = await wallet.writeContract({
+        address: contractAddresses.dgMarketCore,
+        abi: dgMarketCoreAbi.abi,
+        functionName: "addSupportedToken",
+        args: [usdcAddress, usdcPriceFeed],
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash: addTokenTxHash });
+      console.log("✅ Added USDC as supported token");
     } catch (error) {
       console.log("⚠️ Token configuration issue:", error.message);
     }
 
-    // 2. Configure price feeds
-    console.log("\n2️⃣ Adding price feeds...");
+    // 4. Configure price feeds
+    console.log("\n4️⃣ Configuring price feeds...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+
     try {
-      const addPriceFeedTxHash = await wallet.writeContract({
+      const addFeedTxHash = await wallet.writeContract({
         address: contractAddresses.priceOracle,
         abi: priceOracleAbi.abi,
         functionName: "addPriceFeed",
-        args: [config.usdcAddress, config.usdcPriceFeed, 3600],
+        args: [usdcAddress, usdcPriceFeed, 3600], // 1 hour heartbeat
       });
       
-      await publicClient.waitForTransactionReceipt({ hash: addPriceFeedTxHash });
-      console.log("✅ Added USDC price feed");
+      await publicClient.waitForTransactionReceipt({ hash: addFeedTxHash });
+      console.log("✅ Added USDC/USD price feed");
     } catch (error) {
       console.log("⚠️ Price feed configuration issue:", error.message);
     }
 
-    // 3. Add categories
-    console.log("\n3️⃣ Adding marketplace categories...");
+    // 5. Configure categories in DGMarketCore
+    console.log("\n5️⃣ Configuring categories in DGMarketCore...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+
     for (const category of config.categories) {
       try {
         const addCategoryTxHash = await wallet.writeContract({
@@ -165,107 +259,44 @@ async function main() {
         });
         
         await publicClient.waitForTransactionReceipt({ hash: addCategoryTxHash });
-        console.log(`✅ Added category: ${category}`);
+        console.log(`✅ Added category ${category} to DGMarketCore`);
       } catch (error) {
-        console.log(`⚠️ Category "${category}" issue:`, error.message);
+        console.log(`⚠️ Category ${category} configuration issue:`, error.message);
       }
     }
 
-    // 4. Register agents
-    console.log("\n4️⃣ Registering agents...");
-    const agentTypes = [0, 1, 2, 3]; // MONITORING, RESTOCKING, TRADING, PRICE_DISCOVERY
-    const agentNames = ["MONITORING", "RESTOCKING", "TRADING", "PRICE_DISCOVERY"];
-
-    for (let i = 0; i < agentTypes.length; i++) {
-      try {
-        const registerTxHash = await wallet.writeContract({
-          address: contractAddresses.agentCoordinator,
-          abi: agentCoordinatorAbi.abi,
-          functionName: "registerAgent",
-          args: [agentTypes[i], wallet.account.address],
-        });
-        
-        await publicClient.waitForTransactionReceipt({ hash: registerTxHash });
-        console.log(`✅ Registered ${agentNames[i]} agent`);
-      } catch (error) {
-        console.log(`⚠️ ${agentNames[i]} registration issue:`, error.message);
-      }
-    }
-
-    // 5. Activate agents
-    console.log("\n5️⃣ Activating agents...");
-    await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-
-    for (let i = 0; i < agentTypes.length; i++) {
-      try {
-        const activateTxHash = await wallet.writeContract({
-          address: contractAddresses.agentCoordinator,
-          abi: agentCoordinatorAbi.abi,
-          functionName: "updateAgentStatus",
-          args: [agentTypes[i], 1], // ACTIVE = 1
-        });
-        
-        await publicClient.waitForTransactionReceipt({ hash: activateTxHash });
-        console.log(`✅ Activated ${agentNames[i]} agent`);
-      } catch (error) {
-        console.log(`⚠️ ${agentNames[i]} activation issue:`, error.message);
-      }
-    }
-
-    // 6. Set agent parameters
-    console.log("\n6️⃣ Setting agent parameters...");
-    
-    try {
-      // Convert strings to bytes32 for parameters (Viem way)
-      const checkInterval = encodeBytes32String("300");
-      const lowStockThreshold = encodeBytes32String("5");
-      const maxTradeAmount = encodeBytes32String("1000");
-
-      const setParam1TxHash = await wallet.writeContract({
-        address: contractAddresses.agentCoordinator,
-        abi: agentCoordinatorAbi.abi,
-        functionName: "setAgentParameter",
-        args: [0, "check_interval", checkInterval],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: setParam1TxHash });
-
-      const setParam2TxHash = await wallet.writeContract({
-        address: contractAddresses.agentCoordinator,
-        abi: agentCoordinatorAbi.abi,
-        functionName: "setAgentParameter",
-        args: [1, "low_stock_threshold", lowStockThreshold],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: setParam2TxHash });
-
-      const setParam3TxHash = await wallet.writeContract({
-        address: contractAddresses.agentCoordinator,
-        abi: agentCoordinatorAbi.abi,
-        functionName: "setAgentParameter",
-        args: [2, "max_trade_amount", maxTradeAmount],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: setParam3TxHash });
-
-      console.log("✅ Agent parameters configured");
-    } catch (error) {
-      console.log("⚠️ Agent parameter configuration issue:", error.message);
-    }
-
-    console.log("\n" + "=".repeat(50));
-    console.log("🎉 CONFIGURATION COMPLETE!");
-    console.log("=".repeat(50));
-    console.log("✅ Supported tokens: USDC");
-    console.log("✅ Price feeds: USDC/USD");
-    console.log("✅ Categories:", config.categories.length, "categories");
-    console.log("✅ Agents: All 4 agents registered and activated");
-    console.log("✅ Parameters: Agent-specific parameters configured");
+    console.log("\n" + "=".repeat(60));
+    console.log("🎉 ENHANCED SECURITY CONFIGURATION COMPLETE!");
+    console.log("=".repeat(60));
+    console.log("🔒 Security Features:");
+    console.log("  ✅ Public gift card creation REMOVED");
+    console.log("  ✅ Only ADMIN_ROLE can create gift cards manually");
+    console.log("  ✅ Only BACKEND_ROLE can create from Chainlink Functions");
+    console.log("  ✅ ChainlinkGiftCardManager has BACKEND_ROLE in ConfidentialGiftCard");
     console.log("");
-    console.log("🚀 DG Market is ready for use!");
+    console.log("📊 System Configuration:");
+    console.log("  ✅ Supported tokens: USDC");
+    console.log("  ✅ Price feeds: USDC/USD");
+    console.log("  ✅ Categories:", config.categories.length, "categories");
+    console.log("  ✅ Inventory thresholds configured");
+    console.log("");
+    console.log("🔄 Gift Card Creation Flow:");
+    console.log("  1. Chainlink Functions triggers restock");
+    console.log("  2. ChainlinkGiftCardManager receives API response");
+    console.log("  3. Backend service monitors RestockFulfilled events");
+    console.log("  4. Backend calls backendAddGiftCard on ChainlinkGiftCardManager");
+    console.log("  5. ChainlinkGiftCardManager calls backendCreateGiftCard on ConfidentialGiftCard");
+    console.log("  6. Gift card created with encrypted value");
+    console.log("");
+    console.log("🚀 DG Market is ready for secure operation!");
     console.log("");
     console.log("📋 Contract Addresses:");
     console.log("- ConfidentialGiftCard:", contractAddresses.confidentialGiftCard);
     console.log("- PriceOracle:", contractAddresses.priceOracle);  
     console.log("- DGMarketCore:", contractAddresses.dgMarketCore);
-    console.log("- AgentCoordinator:", contractAddresses.agentCoordinator);
+    console.log("- ChainlinkGiftCardManager:", contractAddresses.chainlinkGiftCardManager);
+    console.log("");
+    console.log("⚠️  IMPORTANT: Only authorized roles can create gift cards now!");
 
   } catch (error) {
     console.error("❌ Configuration failed:", error.message);
