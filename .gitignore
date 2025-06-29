@@ -78,3 +78,6 @@ next-env.d.ts
 /backend/yarn-error.log*
 /backend/yarn.lock
 /backend/cache
+
+/backend/combined.log
+/backend/error.log
