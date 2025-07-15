@@ -1,0 +1,83 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+/.windsurf
+/contracts/node_modules
+/contracts/coverage
+/contracts/.env
+/contracts/.env.local
+/contracts/npm-debug.log*
+/contracts/yarn-debug.log*
+/contracts/yarn-error.log*
+/contracts/yarn.lock
+/contracts/cache
+
+/frontend/node_modules
+/frontend/.next
+/frontend/out
+/frontend/build
+/frontend/.next
+/frontend/.next
+/frontend/yarn.lock
+/frontend/yarn-error.log*
+/frontend/.env
+/frontend/.env.local
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/pnpm-lock.yaml
+
+/ai-agent/node_modules
+/ai-agent/coverage
+/ai-agent/.env
+/ai-agent/.env.local
+/ai-agent/npm-debug.log*
+/ai-agent/yarn-debug.log*
+/ai-agent/yarn-error.log*
+/ai-agent/yarn.lock
+/ai-agent/cache
+
+# Backend directory
+/backend/node_modules
+/backend/.env
+/backend/.env.local
+/backend/npm-debug.log*
+/backend/yarn-debug.log*
+/backend/yarn-error.log*
+/backend/yarn.lock
+/backend/cache
+
+/backend/combined.log
+/backend/error.log
