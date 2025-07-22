@@ -1,0 +1,78 @@
+[
+  {
+    "inputs": [],
+    "name": "getAllCategories",
+    "outputs": [{ "internalType": "string[]", "name": "", "type": "string[]" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "category", "type": "string" }],
+    "name": "getCategoryInfo",
+    "outputs": [
+      { "internalType": "uint256", "name": "currentStock", "type": "uint256" },
+      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
+      { "internalType": "uint256", "name": "targetStock", "type": "uint256" },
+      { "internalType": "uint256", "name": "lastRestockTime", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "category", "type": "string" }],
+    "name": "requestRestock",
+    "outputs": [{ "internalType": "uint256", "name": "requestId", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "category", "type": "string" },
+      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
+      { "internalType": "uint256", "name": "targetStock", "type": "uint256" }
+    ],
+    "name": "addCategory",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "category", "type": "string" },
+      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
+      { "internalType": "uint256", "name": "targetStock", "type": "uint256" }
+    ],
+    "name": "updateCategory",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "threshold", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "targetStock", "type": "uint256" }
+    ],
+    "name": "CategoryAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "requestId", "type": "uint256" }
+    ],
+    "name": "RestockRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "count", "type": "uint256" }
+    ],
+    "name": "RestockCompleted",
+    "type": "event"
+  }
+]

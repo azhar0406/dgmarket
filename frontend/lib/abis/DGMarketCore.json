@@ -1,0 +1,82 @@
+[
+  {
+    "inputs": [],
+    "name": "getTotalListings",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "listingId", "type": "uint256" }],
+    "name": "getListingInfo",
+    "outputs": [
+      { "internalType": "uint256", "name": "cardId", "type": "uint256" },
+      { "internalType": "address", "name": "seller", "type": "address" },
+      { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "uint256", "name": "listedAt", "type": "uint256" },
+      { "internalType": "string", "name": "category", "type": "string" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "listingId", "type": "uint256" }],
+    "name": "listingExists",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "listingId", "type": "uint256" },
+      { "internalType": "uint256", "name": "maxPaymentAmount", "type": "uint256" }
+    ],
+    "name": "initiatePurchase",
+    "outputs": [{ "internalType": "uint256", "name": "requestId", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "cardId", "type": "uint256" },
+      { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "bytes", "name": "encryptedPriceInput", "type": "bytes" },
+      { "internalType": "string", "name": "category", "type": "string" }
+    ],
+    "name": "listGiftCard",
+    "outputs": [{ "internalType": "uint256", "name": "listingId", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "uint256", "name": "listingId", "type": "uint256" }],
+    "name": "cancelListing",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "listingId", "type": "uint256" },
+      { "indexed": true, "internalType": "uint256", "name": "cardId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "seller", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "category", "type": "string" }
+    ],
+    "name": "GiftCardListed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "listingId", "type": "uint256" },
+      { "indexed": true, "internalType": "uint256", "name": "cardId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "buyer", "type": "address" },
+      { "indexed": false, "internalType": "address", "name": "seller", "type": "address" },
+      { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "GiftCardPurchased",
+    "type": "event"
+  }
+]
