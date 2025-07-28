@@ -63,7 +63,7 @@ pnpm hardhat compile
 To deploy the complete DGMarket system:
 
 ```sh
-pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia
+pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia --reset
 ```
 
 ### **6. Configure the Contracts**
@@ -83,7 +83,7 @@ This automatically handles:
 
 ### **7. Run Tests**
 ```sh
-pnpm hardhat test --network anvil
+pnpm hardhat test --network baseSepolia
 ```
 
 Or against Base Sepolia:

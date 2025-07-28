@@ -1,78 +1,51 @@
 [
   {
-    "inputs": [],
-    "name": "getAllCategories",
-    "outputs": [{ "internalType": "string[]", "name": "", "type": "string[]" }],
-    "stateMutability": "view",
+    "inputs": [
+      {"internalType": "address", "name": "_router", "type": "address"},
+      {"internalType": "address", "name": "_marketContract", "type": "address"},
+      {"internalType": "address", "name": "_giftCardContract", "type": "address"}
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {"internalType": "string", "name": "category", "type": "string"}
+    ],
+    "name": "requestRestockFromAPI",
+    "outputs": [{"internalType": "bytes32", "name": "requestId", "type": "bytes32"}],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "string", "name": "category", "type": "string" }],
-    "name": "getCategoryInfo",
+    "inputs": [
+      {"internalType": "string", "name": "category", "type": "string"}
+    ],
+    "name": "checkAndTriggerRestock",
+    "outputs": [{"internalType": "bool", "name": "triggered", "type": "bool"}],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "string", "name": "category", "type": "string"}
+    ],
+    "name": "getCategoryInventory",
     "outputs": [
-      { "internalType": "uint256", "name": "currentStock", "type": "uint256" },
-      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
-      { "internalType": "uint256", "name": "targetStock", "type": "uint256" },
-      { "internalType": "uint256", "name": "lastRestockTime", "type": "uint256" }
+      {"internalType": "uint256", "name": "count", "type": "uint256"},
+      {"internalType": "uint256", "name": "threshold", "type": "uint256"},
+      {"internalType": "bool", "name": "active", "type": "bool"}
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "string", "name": "category", "type": "string" }],
-    "name": "requestRestock",
-    "outputs": [{ "internalType": "uint256", "name": "requestId", "type": "uint256" }],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "string", "name": "category", "type": "string" },
-      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
-      { "internalType": "uint256", "name": "targetStock", "type": "uint256" }
-    ],
-    "name": "addCategory",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "string", "name": "category", "type": "string" },
-      { "internalType": "uint256", "name": "threshold", "type": "uint256" },
-      { "internalType": "uint256", "name": "targetStock", "type": "uint256" }
-    ],
-    "name": "updateCategory",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "anonymous": false,
     "inputs": [
-      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "threshold", "type": "uint256" },
-      { "indexed": false, "internalType": "uint256", "name": "targetStock", "type": "uint256" }
-    ],
-    "name": "CategoryAdded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "requestId", "type": "uint256" }
+      {"indexed": true, "internalType": "bytes32", "name": "requestId", "type": "bytes32"},
+      {"indexed": false, "internalType": "string", "name": "category", "type": "string"}
     ],
     "name": "RestockRequested",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": false, "internalType": "string", "name": "category", "type": "string" },
-      { "indexed": false, "internalType": "uint256", "name": "count", "type": "uint256" }
-    ],
-    "name": "RestockCompleted",
     "type": "event"
   }
 ]

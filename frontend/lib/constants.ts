@@ -14,10 +14,19 @@ export const SUPPORTED_TOKENS = [
   { symbol: 'USDT', name: 'Tether USD', decimals: 6, address: '0xb0b86a33e6c8b5b47a95b4ff8b5b64b1e6c8f4b9' },
 ] as const;
 
+/**
+ * VERIFIED CONTRACT ADDRESSES - July 26, 2025
+ * Add this to your existing constants file
+ */
 export const CONTRACT_ADDRESSES = {
-  DG_MARKET_CORE: '0x1234567890123456789012345678901234567890',
-  CONFIDENTIAL_GIFT_CARD: '0x2345678901234567890123456789012345678901',
-  CHAINLINK_GIFT_CARD_MANAGER: '0x3456789012345678901234567890123456789012',
+  DGMARKET_CORE: "0x8b1587091470Da7f387e0d93730f7256f09DE185" as const,
+  CHAINLINK_GIFT_CARD_MANAGER: "0x450718Bed1eE060962eE1706D5c0825AC8D7c213" as const,
+} as const;
+
+export const NETWORK_CONFIG = {
+  chainId: 84532,
+  name: "Base Sepolia", 
+  explorerUrl: "https://sepolia.basescan.org",
 } as const;
 
 // Admin wallet address
