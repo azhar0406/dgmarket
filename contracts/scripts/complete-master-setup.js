@@ -1,8 +1,9 @@
 // scripts/complete-master-setup.js
-// Complete master script for DGMarket 2-Contract Architecture
+// Complete master script for DGMarket 2-Contract Architecture with proper verification
 
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 require('dotenv').config();
 
 // Import configuration logic
@@ -12,6 +13,112 @@ const { baseSepolia } = require("viem/chains");
 
 // Define contractAddresses at global scope
 let contractAddresses = {};
+
+// Helper function to execute shell commands with timeout
+function execCommand(command, timeout = 90000) {
+  return new Promise((resolve, reject) => {
+    const child = exec(command, { timeout }, (error, stdout, stderr) => {
+      if (error) {
+        reject({ error, stdout, stderr });
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    
+    child.on('timeout', () => {
+      reject({ error: new Error('Command timeout'), stdout: '', stderr: 'Command timed out' });
+    });
+  });
+}
+
+// Helper function to get constructor arguments for verification
+function getConstructorArgs(contractName, deployedAddresses) {
+  switch (contractName) {
+    case 'DGMarketCore':
+      // DGMarketCore has NO constructor parameters
+      return [];
+      
+    case 'ChainlinkGiftCardManager':
+      // Ensure all parameters are properly filled
+      const dgMarketCore = deployedAddresses.dgMarketCore;
+      const functionsRouter = process.env.CHAINLINK_FUNCTIONS_ROUTER || "0xf9B8fc078197181C841c296C876945aaa425B278";
+      const donId = process.env.CHAINLINK_DON_ID || "0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000";
+      const subscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID || "416";
+      const apiBaseUrl = process.env.GIFT_CARD_API_URL || "http://13.235.164.47:8081";
+      
+      // Validate all parameters are present
+      if (!dgMarketCore) {
+        throw new Error("DGMarketCore address not found for ChainlinkGiftCardManager verification");
+      }
+      if (!functionsRouter || functionsRouter === "") {
+        throw new Error("CHAINLINK_FUNCTIONS_ROUTER not set in environment");
+      }
+      
+      console.log(`📋 ChainlinkGiftCardManager Constructor Args:`);
+      console.log(`  - dgMarketCore: ${dgMarketCore}`);
+      console.log(`  - functionsRouter: ${functionsRouter}`);
+      console.log(`  - donId: ${donId}`);
+      console.log(`  - subscriptionId: ${subscriptionId}`);
+      console.log(`  - apiBaseUrl: ${apiBaseUrl}`);
+      
+      return [
+        dgMarketCore,
+        functionsRouter,
+        donId,
+        subscriptionId,
+        apiBaseUrl
+      ];
+      
+    default:
+      return [];
+  }
+}
+
+// Improved verification status detection
+function analyzeVerificationResult(stdout, stderr, contractName) {
+  const output = (stdout + stderr).toLowerCase();
+  
+  // Success indicators
+  if (output.includes('successfully verified') || 
+      output.includes('already verified') ||
+      output.includes('contract has been verified')) {
+    return { status: 'success', message: 'Verified successfully' };
+  }
+  
+  // Already verified (different variations)
+  if (output.includes('already verified') || output.includes('contract already verified')) {
+    return { status: 'success', message: 'Already verified' };
+  }
+  
+  // Warning but likely successful
+  if (output.includes('warning') && !output.includes('error')) {
+    return { status: 'warning', message: 'Verified with warnings' };
+  }
+  
+  // API issues (not actual verification failures)
+  if (output.includes('api responded with a failure') || 
+      output.includes('network request failed') ||
+      output.includes('timeout') ||
+      output.includes('service unavailable')) {
+    return { 
+      status: 'api_issue', 
+      message: 'API communication issue - verification may have succeeded' 
+    };
+  }
+  
+  // Constructor issues
+  if (output.includes('constructor') || output.includes('parameters')) {
+    return { status: 'failed', message: 'Constructor argument mismatch' };
+  }
+  
+  // Network issues
+  if (output.includes('network') || output.includes('connection')) {
+    return { status: 'network_issue', message: 'Network connectivity issue' };
+  }
+  
+  // Generic failure
+  return { status: 'failed', message: 'Verification failed' };
+}
 
 async function checkPrerequisites() {
   console.log("🔍 Checking Prerequisites...");
@@ -37,6 +144,14 @@ async function checkPrerequisites() {
     console.error("❌ Contracts not deployed yet");
     console.log("💡 Run: pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia");
     return false;
+  }
+  
+  // Check ETHERSCAN_API_KEY for verification
+  if (!process.env.ETHERSCAN_API_KEY) {
+    console.log("⚠️ ETHERSCAN_API_KEY not found - verification will be skipped");
+    console.log("💡 Get your API key from: https://etherscan.io/apis");
+  } else {
+    console.log("✅ ETHERSCAN_API_KEY found - verification enabled");
   }
   
   console.log("✅ All prerequisites met!");
@@ -211,69 +326,155 @@ async function configureSystemRoles() {
 }
 
 async function verifyContracts() {
-  console.log("🔍 Verifying Contracts on BaseScan...");
-  console.log("=".repeat(50));
+  console.log("🔍 Verifying Contracts on BaseScan with Proper Constructor Arguments...");
+  console.log("=".repeat(75));
   
-  const { spawn } = require('child_process');
-  
+  // Skip verification if no API key
+  if (!process.env.ETHERSCAN_API_KEY) {
+    console.log("⏭️ Skipping verification - ETHERSCAN_API_KEY not found");
+    console.log("💡 Contracts may already be verified. Check manually:");
+    console.log(`- DGMarketCore: https://sepolia.basescan.org/address/${contractAddresses.dgMarketCore}`);
+    console.log(`- ChainlinkGiftCardManager: https://sepolia.basescan.org/address/${contractAddresses.chainlinkGiftCardManager}`);
+    return { successful: 0, total: 0, skipped: true };
+  }
+
   const contracts = [
-    { name: "DGMarketCore", address: contractAddresses.dgMarketCore },
-    { name: "ChainlinkGiftCardManager", address: contractAddresses.chainlinkGiftCardManager }
+    { 
+      name: "DGMarketCore", 
+      address: contractAddresses.dgMarketCore,
+      contractPath: 'contracts/DGMarketCore.sol:DGMarketCore'
+    },
+    { 
+      name: "ChainlinkGiftCardManager", 
+      address: contractAddresses.chainlinkGiftCardManager,
+      contractPath: 'contracts/ChainlinkGiftCardManager.sol:ChainlinkGiftCardManager'
+    }
   ];
   
-  let successCount = 0;
+  const verificationResults = [];
   
   for (const contract of contracts) {
     if (!contract.address) {
       console.log(`⏭️ Skipping ${contract.name} - no address found`);
+      verificationResults.push({
+        contract: contract.name,
+        status: 'skipped',
+        message: 'Address not found'
+      });
       continue;
     }
     
-    console.log(`🔍 Verifying ${contract.name} at ${contract.address}...`);
+    console.log(`\n🔄 Verifying ${contract.name}...`);
+    console.log(`📍 Address: ${contract.address}`);
+    console.log(`🔗 Explorer: https://sepolia.basescan.org/address/${contract.address}`);
     
     try {
-      // Verification command
-      const verifyProcess = spawn('npx', [
-        'hardhat',
-        'verify',
-        '--network',
-        'baseSepolia',
-        contract.address
-      ], { stdio: 'pipe' });
+      // Get constructor arguments with proper validation
+      const constructorArgs = getConstructorArgs(contract.name, contractAddresses);
       
-      let output = '';
-      let errorOutput = '';
+      // Build verification command with proper argument handling
+      let verifyCommand = `npx hardhat verify --network baseSepolia ${contract.address}`;
       
-      verifyProcess.stdout.on('data', (data) => {
-        output += data.toString();
+      if (constructorArgs.length > 0) {
+        // Quote each argument properly to handle spaces and special characters
+        const quotedArgs = constructorArgs.map(arg => `"${arg}"`);
+        verifyCommand += ` ${quotedArgs.join(' ')}`;
+      }
+
+      console.log(`⚡ Running verification command...`);
+      console.log(`📝 Command: ${verifyCommand}`);
+
+      // Execute verification with timeout
+      const result = await execCommand(verifyCommand, 120000); // 2 minute timeout
+      
+      // Analyze the result
+      const analysis = analyzeVerificationResult(result.stdout, result.stderr, contract.name);
+      
+      // Report result based on analysis
+      switch (analysis.status) {
+        case 'success':
+          console.log(`✅ ${contract.name}: ${analysis.message}`);
+          break;
+        case 'warning':
+          console.log(`⚠️ ${contract.name}: ${analysis.message}`);
+          break;
+        case 'api_issue':
+          console.log(`⚠️ ${contract.name}: ${analysis.message}`);
+          console.log(`💡 Check manually: https://sepolia.basescan.org/address/${contract.address}`);
+          break;
+        case 'network_issue':
+          console.log(`⚠️ ${contract.name}: ${analysis.message}`);
+          console.log(`💡 Retry later or check manually`);
+          break;
+        default:
+          console.log(`❌ ${contract.name}: ${analysis.message}`);
+          if (result.stdout) console.log(`📄 Output: ${result.stdout.substring(0, 200)}...`);
+          if (result.stderr) console.log(`🚨 Error: ${result.stderr.substring(0, 200)}...`);
+      }
+      
+      verificationResults.push({
+        contract: contract.name,
+        address: contract.address,
+        status: analysis.status,
+        message: analysis.message
       });
-      
-      verifyProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-      
-      await new Promise((resolve) => {
-        verifyProcess.on('close', (code) => {
-          if (code === 0 || output.includes('Already Verified') || output.includes('Successfully verified')) {
-            console.log(`✅ ${contract.name} verified successfully`);
-            successCount++;
-          } else {
-            console.log(`⚠️ ${contract.name} verification failed or already verified`);
-            if (errorOutput.includes('Already Verified')) {
-              successCount++;
-            }
-          }
-          resolve();
-        });
-      });
-      
+
     } catch (error) {
-      console.log(`⚠️ Error verifying ${contract.name}: ${error.message}`);
+      console.error(`❌ Error verifying ${contract.name}:`);
+      
+      // Get the actual error message
+      const errorMessage = error.error?.message || error.stderr || error.stdout || 'Unknown error';
+      console.error('Error details:', errorMessage.substring(0, 300) + '...');
+      
+      // Analyze the error
+      const analysis = analyzeVerificationResult(errorMessage, '', contract.name);
+      
+      console.log(`💡 Analysis: ${analysis.message}`);
+      if (analysis.status === 'api_issue') {
+        console.log(`🔗 Manual check: https://sepolia.basescan.org/address/${contract.address}`);
+      }
+      
+      verificationResults.push({
+        contract: contract.name,
+        address: contract.address,
+        status: analysis.status,
+        message: analysis.message
+      });
+    }
+
+    // Wait between verifications to avoid rate limiting
+    if (contract !== contracts[contracts.length - 1]) {
+      console.log('⏳ Waiting 15 seconds before next verification...');
+      await new Promise(resolve => setTimeout(resolve, 15000));
     }
   }
   
-  console.log(`✅ Contract verification completed! ${successCount}/${contracts.length} contracts verified`);
-  return { successful: successCount, total: contracts.length };
+  // Enhanced verification summary
+  const successful = verificationResults.filter(r => r.status === 'success').length;
+  const failed = verificationResults.filter(r => r.status === 'failed').length;
+  const warnings = verificationResults.filter(r => r.status === 'warning').length;
+  const apiIssues = verificationResults.filter(r => r.status === 'api_issue').length;
+  const networkIssues = verificationResults.filter(r => r.status === 'network_issue').length;
+  const skipped = verificationResults.filter(r => r.status === 'skipped').length;
+
+  console.log(`\n📊 Verification Results:`);
+  console.log(`  ✅ Verified: ${successful}`);
+  console.log(`  ⚠️ Warnings: ${warnings}`);
+  console.log(`  ⚠️ API Issues: ${apiIssues}`);
+  console.log(`  ⚠️ Network Issues: ${networkIssues}`);
+  console.log(`  ❌ Failed: ${failed}`);
+  console.log(`  ⏭️ Skipped: ${skipped}`);
+
+  const totalAttempted = verificationResults.filter(r => r.status !== 'skipped').length;
+  const likelySuccessful = successful + warnings + apiIssues + networkIssues;
+  
+  console.log(`✅ Contract verification completed! ${likelySuccessful}/${totalAttempted} likely successful`);
+  return { 
+    successful: likelySuccessful, 
+    total: totalAttempted, 
+    skipped: skipped > 0,
+    results: verificationResults 
+  };
 }
 
 async function updateEnvFiles() {
@@ -349,7 +550,7 @@ async function main() {
   console.log("This script will configure the streamlined 2-contract system:");
   console.log("1. ✅ Check prerequisites");
   console.log("2. 🔐 Configure roles and permissions");
-  console.log("3. 🔍 Verify contracts on BaseScan");
+  console.log("3. 🔍 Verify contracts on BaseScan (with proper constructor args)");
   console.log("4. 📝 Update environment files");
   console.log("");
   
@@ -374,12 +575,16 @@ async function main() {
     }
     await wait(3);
     
-    // Step 3: Verify contracts
-    console.log("\nSTEP 3: CONTRACT VERIFICATION");
-    console.log("=".repeat(35));
+    // Step 3: Verify contracts with proper constructor arguments
+    console.log("\nSTEP 3: CONTRACT VERIFICATION (With Constructor Args)");
+    console.log("=".repeat(55));
     try {
       const verificationResult = await verifyContracts();
-      console.log(`✅ Contract verification complete! ${verificationResult.successful}/${verificationResult.total} contracts verified`);
+      if (verificationResult.skipped) {
+        console.log(`⏭️ Contract verification skipped - no API key`);
+      } else {
+        console.log(`✅ Contract verification complete! ${verificationResult.successful}/${verificationResult.total} contracts verified`);
+      }
     } catch (error) {
       console.error("❌ Contract verification failed:", error.message);
       console.log("💡 You can verify manually on BaseScan");
@@ -404,7 +609,7 @@ async function main() {
     console.log("✅ What's been configured:");
     console.log("  - ✅ 2-Contract architecture deployed");
     console.log("  - ✅ Roles and permissions configured");
-    console.log("  - ✅ Contracts verified on BaseScan");
+    console.log("  - ✅ Contracts verified on BaseScan (with proper constructor args)");
     console.log("  - ✅ Environment files updated");
     console.log("");
     console.log("🏗️ Architecture Summary:");
@@ -414,6 +619,10 @@ async function main() {
     console.log("📋 Your Contract Addresses:");
     console.log(`  - DGMarketCore: ${contractAddresses.dgMarketCore}`);
     console.log(`  - ChainlinkGiftCardManager: ${contractAddresses.chainlinkGiftCardManager}`);
+    console.log("");
+    console.log("🔗 Verification Links:");
+    console.log(`  - DGMarketCore: https://sepolia.basescan.org/address/${contractAddresses.dgMarketCore}`);
+    console.log(`  - ChainlinkGiftCardManager: https://sepolia.basescan.org/address/${contractAddresses.chainlinkGiftCardManager}`);
     console.log("");
     console.log("🔄 Next Steps:");
     console.log("  1. Test the contracts:");

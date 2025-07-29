@@ -1,11 +1,12 @@
 // File: /hooks/use-contracts.ts
-// Simple wagmi hooks without conditional queries - Maximum compatibility
+// Enhanced wagmi hooks with dynamic categories and improved functionality
 
 import { useReadContract, useWriteContract } from 'wagmi';
 import { useMemo } from 'react';
-import DGMarketCoreABI from '@/lib/abis/DGMarketCore.json';
+import DGMarketCoreContract from '../../contracts/artifacts/contracts/DGMarketCore.sol/DGMarketCore.json';
+const DGMarketCoreABI = DGMarketCoreContract.abi;
 
-const CONTRACT_ADDRESS = '0x8b1587091470Da7f387e0d93730f7256f09DE185' as const;
+const CONTRACT_ADDRESS = '0x74F4abD898D3701DFf5fD7AB8D7991122C0D612B' as const;
 
 // Types based on confirmed contract structure
 export interface GiftCard {
@@ -20,6 +21,15 @@ export interface GiftCard {
   isActive: boolean;
   isRevealed: boolean;
   createdAt: bigint;
+}
+
+export interface CategoryData {
+  categoryId: number;
+  name: string;
+  count: number;
+  threshold: number;
+  active: boolean;
+  createdAt?: number;
 }
 
 export interface CategoryInventory {
@@ -99,13 +109,76 @@ export function useAllGiftCards() {
   };
 }
 
-// Simplified hook to get category inventory for Gaming (always works)
-export function useGamingCategoryInventory() {
+// NEW: Hook to get all categories dynamically from contract
+export function useAllCategories() {
+  const { data, isLoading, error } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getAllCategories',
+  });
+
+  return {
+    data: data as string[] || [],
+    isLoading,
+    error,
+  };
+}
+
+// NEW: Hook to get all categories with complete data (IDs, counts, etc.)
+export function useAllCategoriesWithData() {
+  const { data, isLoading, error } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getAllCategoriesWithData',
+  });
+
+  const processedData = useMemo(() => {
+    if (!data || !Array.isArray(data) || data.length !== 5) return [];
+    
+    const [categoryIds, categoryNames, categoryCounts, categoryThresholds, categoryActive] = data;
+    
+    if (!Array.isArray(categoryIds) || !Array.isArray(categoryNames)) return [];
+    
+    return categoryIds.map((id: bigint, index: number) => ({
+      categoryId: Number(id),
+      name: categoryNames[index] as string,
+      count: Number(categoryCounts[index] as bigint),
+      threshold: Number(categoryThresholds[index] as bigint),
+      active: categoryActive[index] as boolean,
+    })) as CategoryData[];
+  }, [data]);
+
+  return {
+    data: processedData,
+    isLoading,
+    error,
+  };
+}
+
+// NEW: Hook to get category count
+export function useCategoryCount() {
+  const { data, isLoading, error } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryCount',
+  });
+
+  return {
+    data: data ? Number(data as bigint) : 0,
+    isLoading,
+    error,
+  };
+}
+
+// Enhanced hook to get category inventory by name
+export function useCategoryInventory(categoryName: string) {
+  const shouldFetch = !!categoryName;
+  
   const { data, isLoading, error } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: DGMarketCoreABI,
     functionName: 'getCategoryInventory',
-    args: ['Gaming'],
+    args: [categoryName],
   });
 
   const processedData = useMemo(() => {
@@ -120,18 +193,52 @@ export function useGamingCategoryInventory() {
 
   return {
     data: processedData,
-    isLoading,
-    error,
+    isLoading: shouldFetch ? isLoading : false,
+    error: shouldFetch ? error : null,
   };
 }
 
-// Hook to get specific gift card by ID (simplified - always fetches card 1)
-export function useFirstGiftCard() {
+// Hook to get category inventory by ID
+export function useCategoryById(categoryId: number) {
+  const shouldFetch = categoryId >= 0;
+  
+  const { data, isLoading, error } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryById',
+    args: [categoryId],
+  });
+
+  const processedData = useMemo(() => {
+    if (!data || typeof data !== 'object') return null;
+    
+    const categoryData = data as any;
+    return {
+      categoryId: Number(categoryData.categoryId),
+      name: categoryData.name as string,
+      count: Number(categoryData.count),
+      threshold: Number(categoryData.threshold),
+      active: categoryData.active as boolean,
+      createdAt: Number(categoryData.createdAt),
+    } as CategoryData;
+  }, [data]);
+
+  return {
+    data: processedData,
+    isLoading: shouldFetch ? isLoading : false,
+    error: shouldFetch ? error : null,
+  };
+}
+
+// Hook to get specific gift card by ID
+export function useGiftCard(cardId: number) {
+  const shouldFetch = cardId > 0;
+  
   const { data, isLoading, error } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: DGMarketCoreABI,
     functionName: 'getGiftCard',
-    args: [1],
+    args: [cardId],
   });
 
   const processedData = useMemo(() => {
@@ -155,122 +262,44 @@ export function useFirstGiftCard() {
 
   return {
     data: processedData,
-    isLoading,
-    error,
+    isLoading: shouldFetch ? isLoading : false,
+    error: shouldFetch ? error : null,
   };
 }
 
-// Individual category name hooks (no conditional logic)
-export function useCategory0() {
+// Hook to get gift cards by category
+export function useGiftCardsByCategory(category: string) {
+  const shouldFetch = !!category;
+  
   const { data, isLoading, error } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: DGMarketCoreABI,
-    functionName: 'categories',
-    args: [0],
+    functionName: 'getGiftCardsByCategory',
+    args: [category],
   });
 
-  return {
-    data: data as string,
-    isLoading,
-    error,
-  };
-}
-
-export function useCategory1() {
-  const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: DGMarketCoreABI,
-    functionName: 'categories',
-    args: [1],
-  });
-
-  return {
-    data: data as string,
-    isLoading,
-    error,
-  };
-}
-
-export function useCategory2() {
-  const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: DGMarketCoreABI,
-    functionName: 'categories',
-    args: [2],
-  });
-
-  return {
-    data: data as string,
-    isLoading,
-    error,
-  };
-}
-
-export function useCategory3() {
-  const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: DGMarketCoreABI,
-    functionName: 'categories',
-    args: [3],
-  });
-
-  return {
-    data: data as string,
-    isLoading,
-    error,
-  };
-}
-
-export function useCategory4() {
-  const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: DGMarketCoreABI,
-    functionName: 'categories',
-    args: [4],
-  });
-
-  return {
-    data: data as string,
-    isLoading,
-    error,
-  };
-}
-
-// Hook to get all category names using individual hooks
-export function useAllCategories() {
-  const category0 = useCategory0();
-  const category1 = useCategory1();
-  const category2 = useCategory2();
-  const category3 = useCategory3();
-  const category4 = useCategory4();
-
-  const isLoading = category0.isLoading || category1.isLoading || category2.isLoading || category3.isLoading || category4.isLoading;
-  const error = category0.error || category1.error || category2.error || category3.error || category4.error;
-
-  const categories = useMemo(() => {
-    if (isLoading || error) return [];
+  const processedData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
     
-    return [
-      category0.data,
-      category1.data,
-      category2.data,
-      category3.data,
-      category4.data,
-    ].filter(Boolean) as string[];
-  }, [
-    category0.data,
-    category1.data,
-    category2.data,
-    category3.data,
-    category4.data,
-    isLoading,
-    error,
-  ]);
+    return (data as GiftCard[]).map(card => ({
+      cardId: card.cardId,
+      publicPrice: card.publicPrice,
+      owner: card.owner,
+      creator: card.creator,
+      expiryDate: card.expiryDate,
+      category: card.category,
+      description: card.description,
+      imageUrl: card.imageUrl,
+      isActive: card.isActive,
+      isRevealed: card.isRevealed,
+      createdAt: card.createdAt,
+    }));
+  }, [data]);
 
   return {
-    data: categories,
-    isLoading,
-    error,
+    data: processedData,
+    isLoading: shouldFetch ? isLoading : false,
+    error: shouldFetch ? error : null,
   };
 }
 
@@ -300,23 +329,6 @@ export function usePurchaseGiftCard() {
   };
 }
 
-// Hook for gift cards by category
-export function useGiftCardsByCategory(category: string) {
-  const { data: allGiftCards, isLoading, error } = useActiveListings();
-
-  const filteredCards = useMemo(() => {
-    if (!allGiftCards || !category) return [];
-    
-    return allGiftCards.filter(card => card.category === category);
-  }, [allGiftCards, category]);
-
-  return {
-    data: filteredCards,
-    isLoading,
-    error,
-  };
-}
-
 // Hook to check if contract supports an interface
 export function useSupportsInterface() {
   const { data, isLoading, error } = useReadContract({
@@ -328,6 +340,33 @@ export function useSupportsInterface() {
 
   return {
     data: data as boolean,
+    isLoading,
+    error,
+  };
+}
+
+// Utility hook to get category statistics
+export function useCategoryStatistics() {
+  const { data: categoriesWithData, isLoading, error } = useAllCategoriesWithData();
+  
+  const statistics = useMemo(() => {
+    if (!categoriesWithData) return null;
+    
+    const totalCards = categoriesWithData.reduce((sum, cat) => sum + cat.count, 0);
+    const activeCategories = categoriesWithData.filter(cat => cat.active).length;
+    const categoriesNeedingRestock = categoriesWithData.filter(cat => cat.count <= cat.threshold).length;
+    
+    return {
+      totalCards,
+      totalCategories: categoriesWithData.length,
+      activeCategories,
+      categoriesNeedingRestock,
+      categories: categoriesWithData,
+    };
+  }, [categoriesWithData]);
+
+  return {
+    data: statistics,
     isLoading,
     error,
   };

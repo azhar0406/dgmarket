@@ -1,5 +1,5 @@
 // This setup uses Hardhat Ignition to manage smart contract deployments.
-// Learn more about it at https://hardhat.org/ignition
+// Fixed deployment script with correct role management
 
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
@@ -16,14 +16,14 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   // Fixed DON ID - properly formatted bytes32 (64 characters)
   const chainlinkDonId = process.env.CHAINLINK_DON_ID || "0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000"; // fun-base-sepolia-1 (32 bytes)
   
-  const chainlinkSubscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID || "0"; // Will be updated by setup script
+  const chainlinkSubscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID || "416"; // Updated subscription ID
   
   // Base Sepolia token addresses
   const usdcAddress = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
   const usdtAddress = "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"; // Base Sepolia USDT
   
   // API configuration
-  const okxApiBaseUrl = process.env.GIFT_CARD_API_URL || "http://localhost:8081";
+  const okxApiBaseUrl = process.env.GIFT_CARD_API_URL || "http://13.235.164.47:8081";
   
   console.log("📋 Deployment Configuration:");
   console.log("- Chainlink Router:", chainlinkFunctionsRouter);
@@ -37,8 +37,8 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   // CONTRACT DEPLOYMENT (2-Contract Architecture)
   // =============================================================================
 
-  // 1. Deploy DGMarketCore (All-in-One Contract)
-  console.log("📦 Deploying DGMarketCore (All-in-One: FHE + Marketplace + Inventory)...");
+  // 1. Deploy DGMarketCore (Enhanced with Dynamic Categories)
+  console.log("📦 Deploying Enhanced DGMarketCore (FHE + Marketplace + Dynamic Categories)...");
   const dgMarketCore = m.contract("DGMarketCore");
 
   // 2. Deploy ChainlinkGiftCardManager (Automation Only)
@@ -52,19 +52,25 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   ]);
 
   // =============================================================================
-  // ROLE CONFIGURATION
+  // ROLE CONFIGURATION - FIXED WITH HARDCODED HASH
   // =============================================================================
 
   console.log("🔐 Configuring roles and permissions...");
 
+  // ✅ FIXED: Use hardcoded AUTOMATION_ROLE hash (most compatible)
+  // AUTOMATION_ROLE = keccak256("AUTOMATION_ROLE")
+  const automationRoleHash = "0xfbd454f36a7e1a388bd6fc3ab10d434aa4578f811acbbcf33afb1c697486313c";
+  
+  console.log("🔑 AUTOMATION_ROLE hash:", automationRoleHash);
+
   // Grant AUTOMATION_ROLE to ChainlinkGiftCardManager in DGMarketCore
   // This allows ChainlinkGiftCardManager to create gift cards via automationCreateGiftCard()
-  m.call(dgMarketCore, "grantAutomationRole", [chainlinkGiftCardManager], {
+  m.call(dgMarketCore, "grantRole", [automationRoleHash, chainlinkGiftCardManager], {
     id: "GrantAutomationRoleToChainlinkManager"
   });
 
   // =============================================================================
-  // TOKEN CONFIGURATION - FIXED: SKIP (ALREADY ADDED IN CONSTRUCTOR)
+  // TOKEN CONFIGURATION
   // =============================================================================
 
   console.log("💰 Supported tokens configuration...");
@@ -72,34 +78,42 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   console.log("- USDC Address:", usdcAddress);
   console.log("- USDT Address:", usdtAddress);
 
-  // ✅ FIXED: Skip adding tokens since they're already added in constructor
+  // ✅ CONFIRMED: Skip adding tokens since they're already added in constructor
   // USDC and USDT are automatically added when DGMarketCore is deployed
-  // No need to call addSupportedToken() again
 
   // =============================================================================
-  // CATEGORY CONFIGURATION - FIXED: ONLY DGMarketCore
+  // CATEGORY CONFIGURATION - Enhanced for Dynamic Categories
   // =============================================================================
 
   console.log("📂 Configuring gift card categories...");
 
-  // ✅ FIXED: Add categories ONLY to DGMarketCore (ChainlinkManager doesn't have addCategory function)
-  const categories = [
-    "Food & Dining",
-    "Shopping", 
-    "Entertainment",
-    "Travel",
-    "Gaming"
+  // ✅ Categories are already initialized in constructor for enhanced contract
+  // The enhanced contract automatically creates these categories:
+  // - Food & Dining
+  // - Shopping
+  // - Entertainment 
+  // - Travel
+  // - Gaming
+
+  console.log("ℹ️  Categories are automatically initialized in enhanced contract constructor");
+  console.log("✅ Default categories: Food & Dining, Shopping, Entertainment, Travel, Gaming");
+  console.log("✅ All categories have threshold of 5 for auto-restocking");
+
+  // Optional: Add additional categories if needed
+  // Uncomment and modify if you want to add more categories beyond the default 5
+  /*
+  const additionalCategories = [
+    // "Health & Beauty",
+    // "Sports & Fitness",
+    // "Technology"
   ];
 
-  categories.forEach((category, index) => {
+  additionalCategories.forEach((category, index) => {
     m.call(dgMarketCore, "addCategory", [category, 5], { // threshold = 5
-      id: `AddCoreCategory${index}_${category.replace(/[^a-zA-Z0-9]/g, '')}`
+      id: `AddAdditionalCategory${index}_${category.replace(/[^a-zA-Z0-9]/g, '')}`
     });
   });
-
-  // ❌ REMOVED: ChainlinkGiftCardManager doesn't have addCategory function
-  // Categories are managed entirely by DGMarketCore
-  // ChainlinkGiftCardManager triggers restocking based on DGMarketCore's inventory events
+  */
 
   // =============================================================================
   // INITIAL CONFIGURATION
@@ -112,36 +126,56 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
     id: "SetMarketplaceFee"
   });
 
+  // ✅ REMOVED: ChainlinkManager functions not available in current contract
+  // These functions will be added in future contract updates if needed:
+  // - setChainlinkManager(address)
+  // - setAutoRestockEnabled(bool)
+  
+  console.log("ℹ️  Chainlink integration functions skipped (not available in current contract)");
+  console.log("ℹ️  ChainlinkManager will function independently for now");
+
   // =============================================================================
   // RETURN DEPLOYED CONTRACTS
   // =============================================================================
 
-  console.log("✅ DG Market deployment complete!");
+  console.log("✅ Enhanced DG Market deployment complete!");
   console.log("📋 Deployed Contracts:");
-  console.log("- DGMarketCore: All-in-one core contract (includes category management)");
-  console.log("- ChainlinkGiftCardManager: Automation-only contract (monitors DGMarketCore events)");
+  console.log("- DGMarketCore: Enhanced all-in-one contract with dynamic categories");
+  console.log("- ChainlinkGiftCardManager: Automation-only contract");
+  console.log("");
+  console.log("🔐 Role Configuration:");
+  console.log("- ✅ AUTOMATION_ROLE granted to ChainlinkGiftCardManager");
+  console.log("- ✅ Admin roles configured for contract owner");
   console.log("");
   console.log("💰 Token Configuration:");
-  console.log("- USDC & USDT: ✅ Automatically configured in constructor");
-  console.log("- Supported tokens ready for marketplace transactions");
+  console.log("- ✅ USDC & USDT automatically configured");
+  console.log("- ✅ Ready for marketplace transactions");
   console.log("");
-  console.log("📂 Category Configuration:");
-  console.log("- ✅ 5 categories added: Food & Dining, Shopping, Entertainment, Travel, Gaming");
-  console.log("- ✅ All categories have threshold of 5 for auto-restocking");
+  console.log("📂 Enhanced Category System:");
+  console.log("- ✅ 5 default categories initialized");
+  console.log("- ✅ Dynamic category loading functions available");
+  console.log("- ✅ Category IDs and statistics tracking");
+  console.log("- ✅ Real-time inventory management");
   console.log("");
-  console.log("🎯 Architecture Notes:");
-  console.log("- Categories managed by DGMarketCore only");
-  console.log("- ChainlinkGiftCardManager monitors inventory via events");
-  console.log("- Automatic restocking triggered by inventory thresholds");
+  console.log("🤖 Automation Configuration:");
+  console.log("- ⚠️ ChainlinkManager functions skipped (not in current contract)");
+  console.log("- ✅ AUTOMATION_ROLE granted for gift card creation");
+  console.log("- ✅ ChainlinkManager can create cards independently");
+  console.log("");
+  console.log("🎯 New Dynamic Features:");
+  console.log("- getAllCategories() - Get all category names");
+  console.log("- getAllCategoriesWithData() - Get categories with IDs and stats");
+  console.log("- getCategoryById(id) - Get specific category data");
+  console.log("- getCategoryCount() - Get total category count");
   console.log("");
   console.log("🎯 Next Steps:");
-  console.log("1. Run: node scripts/complete-master-setup.js");
-  console.log("2. Update EXISTING_CORE_ADDRESS in test/AdminGiftCard.test.js");
-  console.log("3. Test: pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia");
-  console.log("4. Start mock API service on port 8081");
-  console.log("5. Start backend service on port 3001");
+  console.log("1. Update frontend CONTRACT_ADDRESS with new deployment");
+  console.log("2. Use enhanced hooks for dynamic category loading");
+  console.log("3. Run gift card creation script with IPFS images");
+  console.log("4. Test dynamic marketplace functionality");
+  console.log("5. Verify category filtering and live counts");
 
-  // Return only contract futures - no plain objects allowed
+  // Return deployed contracts
   return { 
     dgMarketCore,
     chainlinkGiftCardManager

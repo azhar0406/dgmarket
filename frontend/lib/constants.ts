@@ -1,26 +1,30 @@
+// ✅ UPDATED CONSTANTS - July 28, 2025
+// Dynamic categories from contract - no more hardcoded categories!
+
 export const GIFT_CARD_CATEGORIES = [
   { id: 'all', name: 'All Categories', description: 'Browse all available gift cards' },
-  { id: 'retail', name: 'Retail', description: 'Shopping and department stores' },
-  { id: 'dining', name: 'Dining', description: 'Restaurants and food delivery' },
-  { id: 'entertainment', name: 'Entertainment', description: 'Movies, games, and streaming' },
+  // Categories are now loaded dynamically from contract using getAllCategories()
+  // The following are the current categories in the contract:
+  { id: 'food-dining', name: 'Food & Dining', description: 'Restaurants and food delivery' },
+  { id: 'shopping', name: 'Shopping', description: 'Shopping and retail stores' },
+  { id: 'entertainment', name: 'Entertainment', description: 'Movies, streaming, and entertainment' },
   { id: 'travel', name: 'Travel', description: 'Hotels, airlines, and booking' },
-  { id: 'tech', name: 'Technology', description: 'Electronics and software' },
   { id: 'gaming', name: 'Gaming', description: 'Gaming platforms and in-game currency' },
 ] as const;
 
 export const SUPPORTED_TOKENS = [
   { symbol: 'ETH', name: 'Ethereum', decimals: 18, address: '0x0000000000000000000000000000000000000000' },
-  { symbol: 'USDC', name: 'USD Coin', decimals: 6, address: '0xa0b86a33e6c8b5b47a95b4ff8b5b64b1e6c8f4b8' },
-  { symbol: 'USDT', name: 'Tether USD', decimals: 6, address: '0xb0b86a33e6c8b5b47a95b4ff8b5b64b1e6c8f4b9' },
+  { symbol: 'USDC', name: 'USD Coin', decimals: 6, address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' }, // ✅ UPDATED: Real Base Sepolia USDC
+  { symbol: 'USDT', name: 'Tether USD', decimals: 6, address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2' }, // ✅ UPDATED: Real Base Sepolia USDT
 ] as const;
 
 /**
- * VERIFIED CONTRACT ADDRESSES - July 26, 2025
- * Add this to your existing constants file
+ * ✅ LATEST VERIFIED CONTRACT ADDRESSES - July 28, 2025
+ * Updated with new deployment that includes enhanced dynamic categories
  */
 export const CONTRACT_ADDRESSES = {
-  DGMARKET_CORE: "0x8b1587091470Da7f387e0d93730f7256f09DE185" as const,
-  CHAINLINK_GIFT_CARD_MANAGER: "0x450718Bed1eE060962eE1706D5c0825AC8D7c213" as const,
+  DGMARKET_CORE: "0x74F4abD898D3701DFf5fD7AB8D7991122C0D612B" as const, // ✅ UPDATED: New enhanced contract
+  CHAINLINK_GIFT_CARD_MANAGER: "0xfC0C84823308e3b2b9f046d4187f5f1A0CBAeFA6" as const, // ✅ UPDATED: New automation contract
 } as const;
 
 export const NETWORK_CONFIG = {
@@ -31,3 +35,36 @@ export const NETWORK_CONFIG = {
 
 // Admin wallet address
 export const ADMIN_WALLET_ADDRESS = '0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09';
+
+// ✅ NEW: Contract feature flags for enhanced functionality
+export const CONTRACT_FEATURES = {
+  DYNAMIC_CATEGORIES: true, // Contract supports getAllCategories() and getAllCategoriesWithData()
+  ENHANCED_VIEWS: true,     // Contract supports getCategoryById(), getCategoryCount()
+  REAL_IPFS_IMAGES: true,   // All cards have real IPFS images
+  FHE_ENCRYPTION: true,     // Proper Inco SDK encryption
+} as const;
+
+// ✅ NEW: IPFS configuration for real images
+export const IPFS_CONFIG = {
+  BASE_URL: "https://fuchsia-total-catshark-247.mypinata.cloud/ipfs/bafybeiasqs7q3uuahrz7o44l46d73fmerfqt2ypjscnc5zhwwu6ug77gq4/",
+  GATEWAY: "https://fuchsia-total-catshark-247.mypinata.cloud",
+} as const;
+
+// ✅ NEW: Dynamic category helpers
+export const CATEGORY_MAPPING = {
+  'Food & Dining': 'food-dining',
+  'Shopping': 'shopping', 
+  'Entertainment': 'entertainment',
+  'Travel': 'travel',
+  'Gaming': 'gaming',
+} as const;
+
+// ✅ NEW: Contract function names for dynamic loading
+export const CONTRACT_FUNCTIONS = {
+  GET_ALL_CATEGORIES: 'getAllCategories',
+  GET_CATEGORIES_WITH_DATA: 'getAllCategoriesWithData', 
+  GET_CATEGORY_BY_ID: 'getCategoryById',
+  GET_CATEGORY_COUNT: 'getCategoryCount',
+  GET_ALL_GIFT_CARDS: 'getAllGiftCards',
+  GET_CARDS_BY_CATEGORY: 'getGiftCardsByCategory',
+} as const;
