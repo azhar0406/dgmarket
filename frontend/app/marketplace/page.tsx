@@ -1,19 +1,38 @@
 // File: /app/marketplace/page.tsx
 // Enhanced dynamic marketplace with real categories and beautiful images
 
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { formatEther } from 'viem';
-import { Navigation } from '@/components/navigation/navigation';
-import { Footer } from '@/components/layout/footer';
-import { useActiveListings, useAllCategoriesWithData, useCategoryStatistics } from '@/hooks/use-contracts';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ShoppingCart, Search, Filter, Eye, EyeOff, DollarSign, TrendingUp } from 'lucide-react';
+import { useState, useEffect, useMemo } from "react";
+import { formatEther, formatUnits } from "viem";
+import { Navigation } from "@/components/navigation/navigation";
+import { Footer } from "@/components/layout/footer";
+import {
+  useActiveListings,
+  useAllCategories,
+  useCategoryStatistics,
+} from "@/hooks/use-contracts";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Loader2,
+  ShoppingCart,
+  Search,
+  Filter,
+  Eye,
+  EyeOff,
+  DollarSign,
+  TrendingUp,
+} from "lucide-react";
 
 // Enhanced Gift Card Component with refined design and real images
 function EnhancedGiftCard({ listing }: { listing: any }) {
@@ -21,25 +40,31 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
 
   const getCategoryColor = (category: string) => {
     const colors = {
-      'Food & Dining': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-      'Shopping': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      'Entertainment': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      'Travel': 'bg-green-500/10 text-green-400 border-green-500/20',
-      'Gaming': 'bg-red-500/10 text-red-400 border-red-500/20',
+      "Food & Dining": "bg-orange-500/10 text-orange-400 border-orange-500/20",
+      Shopping: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      Entertainment: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+      Travel: "bg-green-500/10 text-green-400 border-green-500/20",
+      Gaming: "bg-red-500/10 text-red-400 border-red-500/20",
     };
-    return colors[category as keyof typeof colors] || 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+    return (
+      colors[category as keyof typeof colors] ||
+      "bg-gray-500/10 text-gray-400 border-gray-500/20"
+    );
   };
 
   // Category-specific gradients for image fallbacks
   const getCategoryGradient = (category: string) => {
     const gradients = {
-      'Food & Dining': 'from-orange-100 to-red-100',
-      'Shopping': 'from-blue-100 to-cyan-100',
-      'Entertainment': 'from-purple-100 to-pink-100',
-      'Travel': 'from-green-100 to-emerald-100',
-      'Gaming': 'from-red-100 to-pink-100',
+      "Food & Dining": "from-orange-100 to-red-100",
+      Shopping: "from-blue-100 to-cyan-100",
+      Entertainment: "from-purple-100 to-pink-100",
+      Travel: "from-green-100 to-emerald-100",
+      Gaming: "from-red-100 to-pink-100",
     };
-    return gradients[category as keyof typeof gradients] || 'from-gray-100 to-gray-200';
+    return (
+      gradients[category as keyof typeof gradients] ||
+      "from-gray-100 to-gray-200"
+    );
   };
 
   return (
@@ -56,11 +81,19 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
               loading="lazy"
             />
           ) : (
-            <div className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${getCategoryGradient(listing.category)}`}>
+            <div
+              className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${getCategoryGradient(
+                listing.category
+              )}`}
+            >
               <div className="text-center">
                 <ShoppingCart className="h-12 w-12 text-muted-foreground/60 mx-auto mb-2" />
-                <p className="text-sm font-medium text-muted-foreground">{listing.title}</p>
-                <p className="text-xs text-muted-foreground/60">{listing.category}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {listing.title}
+                </p>
+                <p className="text-xs text-muted-foreground/60">
+                  {listing.category}
+                </p>
               </div>
             </div>
           )}
@@ -71,24 +104,30 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
 
         {/* Status Badges - Refined and subtle */}
         <div className="absolute top-3 left-3 flex flex-col gap-1">
-          <Badge 
+          <Badge
             variant="outline"
             className={`text-xs px-2 py-0.5 backdrop-blur-sm border ${
-              listing.isActive 
-                ? 'bg-green-500/10 text-green-400 border-green-500/30' 
-                : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+              listing.isActive
+                ? "bg-green-500/10 text-green-400 border-green-500/30"
+                : "bg-gray-500/10 text-gray-400 border-gray-500/30"
             }`}
           >
             {listing.isActive ? "Active" : "Inactive"}
           </Badge>
-          
+
           {listing.isRevealed ? (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-400 border-blue-500/30 backdrop-blur-sm">
+            <Badge
+              variant="outline"
+              className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-400 border-blue-500/30 backdrop-blur-sm"
+            >
               <Eye className="h-2.5 w-2.5 mr-1" />
               Revealed
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-background/90 text-muted-foreground border-border/50 backdrop-blur-sm">
+            <Badge
+              variant="outline"
+              className="text-xs px-2 py-0.5 bg-background/90 text-muted-foreground border-border/50 backdrop-blur-sm"
+            >
               <EyeOff className="h-2.5 w-2.5 mr-1" />
               Hidden
             </Badge>
@@ -104,29 +143,39 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
         </div>
       </div>
 
-      <CardContent className="p-5">
+      <CardContent className="p-5 flex-1 flex flex-col">
         {/* Category badge */}
         <div className="mb-3">
-          <Badge className={`text-xs px-2.5 py-1 border ${getCategoryColor(listing.category)}`}>
+          <Badge
+            className={`text-xs px-2.5 py-1 border ${getCategoryColor(
+              listing.category
+            )}`}
+          >
             {listing.category}
           </Badge>
         </div>
 
         {/* Title and Description */}
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-foreground mb-2 line-clamp-2 group-hover:text-primary/80 transition-colors">
-            {listing.title}
-          </h3>
-          <p className="text-muted-foreground line-clamp-2 text-sm leading-relaxed">
-            {listing.description}
-          </p>
-        </div>
+        {/* Title with consistent height */}
+<div className="h-14 mb-2 flex items-start">
+  <h3 className="text-lg font-semibold text-foreground line-clamp-2...">
+    {listing.title}
+  </h3>
+</div>
 
+{/* Description with consistent height */}
+<div className="h-10 flex items-start">
+  <p className="text-muted-foreground line-clamp-2...">
+    {listing.description}
+  </p>
+</div>
         {/* Contract Details */}
         <div className="mb-5 p-3 bg-muted/30 rounded-md text-xs space-y-1.5 border border-border/30">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Card ID:</span>
-            <code className="text-foreground font-mono bg-background/50 px-1.5 py-0.5 rounded">#{listing.id}</code>
+            <code className="text-foreground font-mono bg-background/50 px-1.5 py-0.5 rounded">
+              #{listing.id}
+            </code>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Owner:</span>
@@ -137,16 +186,16 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
         </div>
 
         {/* Purchase Button */}
-        <Button 
+        <Button
           className={`w-full h-11 font-medium transition-all duration-200 ${
-            listing.isActive 
-              ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md' 
-              : 'bg-muted text-muted-foreground cursor-not-allowed'
+            listing.isActive
+              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md"
+              : "bg-muted text-muted-foreground cursor-not-allowed"
           }`}
           disabled={!listing.isActive}
         >
           {!listing.isActive ? (
-            'Not Available'
+            "Not Available"
           ) : (
             <>
               <ShoppingCart className="h-4 w-4 mr-2" />
@@ -157,7 +206,9 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
 
         <div className="text-center mt-3">
           <p className="text-xs text-muted-foreground/80">
-            {listing.isRevealed ? 'Details visible after purchase' : 'Gift card details hidden until revealed'}
+            {listing.isRevealed
+              ? "Details visible after purchase"
+              : "Gift card details hidden until revealed"}
           </p>
         </div>
       </CardContent>
@@ -167,13 +218,23 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
 
 export default function MarketplacePage() {
   const [isClient, setIsClient] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'price-asc' | 'price-desc' | 'newest' | 'oldest'>('newest');
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "price-asc" | "price-desc" | "newest" | "oldest"
+  >("newest");
 
   // Get live contract data
-  const { data: listings, isLoading: listingsLoading, error: listingsError } = useActiveListings();
-  const { data: categoriesData, isLoading: categoriesLoading, error: categoriesError } = useAllCategoriesWithData();
+  const {
+    data: listings,
+    isLoading: listingsLoading,
+    error: listingsError,
+  } = useActiveListings();
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useAllCategories();
   const { data: statistics, isLoading: statsLoading } = useCategoryStatistics();
 
   useEffect(() => {
@@ -183,11 +244,11 @@ export default function MarketplacePage() {
   // Transform contract data to marketplace format
   const transformedListings = useMemo(() => {
     if (!listings) return [];
-    
-    return listings.map(listing => ({
+
+    return listings.map((listing) => ({
       id: listing.cardId.toString(),
       title: listing.description,
-      price: parseFloat(formatEther(listing.publicPrice)),
+      price: parseFloat(formatUnits(listing.publicPrice, 6)),
       category: listing.category,
       image: listing.imageUrl || null,
       seller: listing.owner,
@@ -205,15 +266,16 @@ export default function MarketplacePage() {
   // Get category counts from transformed listings (real-time counts)
   const categoryInventories = useMemo(() => {
     const inventories: Record<string, number> = {};
-    
+
     if (categoriesData) {
-      categoriesData.forEach(category => {
-        // Use real-time count from listings, not cached contract count
-        const liveCount = transformedListings.filter(listing => listing.category === category.name).length;
-        inventories[category.name] = liveCount;
+      categoriesData.forEach((categoryName) => {
+        const liveCount = transformedListings.filter(
+          (listing) => listing.category === categoryName
+        ).length;
+        inventories[categoryName] = liveCount;
       });
     }
-    
+
     return inventories;
   }, [transformedListings, categoriesData]);
 
@@ -222,32 +284,35 @@ export default function MarketplacePage() {
     let filtered = transformedListings;
 
     // Filter by category
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(listing => listing.category === selectedCategory);
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(
+        (listing) => listing.category === selectedCategory
+      );
     }
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(listing => 
-        listing.title.toLowerCase().includes(query) ||
-        listing.category.toLowerCase().includes(query) ||
-        listing.description.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (listing) =>
+          listing.title.toLowerCase().includes(query) ||
+          listing.category.toLowerCase().includes(query) ||
+          listing.description.toLowerCase().includes(query)
       );
     }
 
     // Sort listings
     switch (sortBy) {
-      case 'price-asc':
+      case "price-asc":
         filtered.sort((a, b) => a.price - b.price);
         break;
-      case 'price-desc':
+      case "price-desc":
         filtered.sort((a, b) => b.price - a.price);
         break;
-      case 'newest':
+      case "newest":
         filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         break;
-      case 'oldest':
+      case "oldest":
         filtered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         break;
     }
@@ -269,7 +334,7 @@ export default function MarketplacePage() {
             <div className="h-8 w-24 bg-muted animate-pulse rounded" />
           </div>
         </div>
-        
+
         <main className="container mx-auto px-4 py-8">
           <div className="mb-8">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-600 to-primary bg-clip-text text-transparent">
@@ -279,7 +344,7 @@ export default function MarketplacePage() {
               Browse and purchase gift cards from the community
             </p>
           </div>
-          
+
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
             <p className="text-muted-foreground">Loading marketplace...</p>
@@ -301,7 +366,7 @@ export default function MarketplacePage() {
           <p className="text-muted-foreground mt-2">
             Browse and purchase gift cards from the community
           </p>
-          
+
           {/* Dynamic Statistics */}
           {statistics && !statsLoading && (
             <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
@@ -312,7 +377,8 @@ export default function MarketplacePage() {
               <div>{statistics.activeCategories} active categories</div>
               {statistics.categoriesNeedingRestock > 0 && (
                 <div className="text-orange-500">
-                  {statistics.categoriesNeedingRestock} categories need restocking
+                  {statistics.categoriesNeedingRestock} categories need
+                  restocking
                 </div>
               )}
             </div>
@@ -323,7 +389,9 @@ export default function MarketplacePage() {
         {isLoading && (
           <div className="text-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Loading gift cards from blockchain...</p>
+            <p className="text-muted-foreground">
+              Loading gift cards from blockchain...
+            </p>
           </div>
         )}
 
@@ -331,8 +399,12 @@ export default function MarketplacePage() {
         {error && (
           <div className="text-center py-12">
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 max-w-md mx-auto">
-              <h3 className="text-lg font-semibold text-destructive mb-2">Failed to load marketplace</h3>
-              <p className="text-muted-foreground text-sm mb-4">{error.message}</p>
+              <h3 className="text-lg font-semibold text-destructive mb-2">
+                Failed to load marketplace
+              </h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                {error.message}
+              </p>
               <Button onClick={() => window.location.reload()}>
                 Try Again
               </Button>
@@ -346,13 +418,17 @@ export default function MarketplacePage() {
             {/* Live Data Indicator */}
             <div className="mb-6 flex items-center justify-between">
               <p className="text-lg text-foreground">
-                {transformedListings.length} gift card{transformedListings.length !== 1 ? 's' : ''} available
-                {categoriesData && ` across ${categoriesData.length} categories`}
+                {transformedListings.length} gift card
+                {transformedListings.length !== 1 ? "s" : ""} available
+                {categoriesData &&
+                  ` across ${categoriesData.length} categories`}
               </p>
-              
+
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-muted-foreground">Live blockchain data</span>
+                <span className="text-sm text-muted-foreground">
+                  Live blockchain data
+                </span>
               </div>
             </div>
 
@@ -370,18 +446,25 @@ export default function MarketplacePage() {
                     className="pl-10 h-11 bg-background border-border"
                   />
                 </div>
-                
+
                 {/* Sort Dropdown */}
                 <div className="lg:w-56">
-                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                  <Select
+                    value={sortBy}
+                    onValueChange={(value: any) => setSortBy(value)}
+                  >
                     <SelectTrigger className="h-11 bg-background border-border">
                       <SelectValue placeholder="Sort by..." />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="newest">Newest First</SelectItem>
                       <SelectItem value="oldest">Oldest First</SelectItem>
-                      <SelectItem value="price-asc">Price: Low to High</SelectItem>
-                      <SelectItem value="price-desc">Price: High to Low</SelectItem>
+                      <SelectItem value="price-asc">
+                        Price: Low to High
+                      </SelectItem>
+                      <SelectItem value="price-desc">
+                        Price: High to Low
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -390,36 +473,45 @@ export default function MarketplacePage() {
               {/* Dynamic Category Filter */}
               <div className="flex items-center gap-3 flex-wrap">
                 <Filter className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground mr-2">Filter by category:</span>
-                
+                <span className="text-sm text-muted-foreground mr-2">
+                  Filter by category:
+                </span>
+
                 <Button
-                  variant={selectedCategory === 'all' ? 'default' : 'outline'}
+                  variant={selectedCategory === "all" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory('all')}
+                  onClick={() => setSelectedCategory("all")}
                   className="rounded-full h-8"
                 >
                   All ({transformedListings.length})
                 </Button>
-                
+
                 {/* Dynamic categories from contract */}
-                {categoriesData && categoriesData.map(category => (
-                  <Button
-                    key={category.categoryId}
-                    variant={selectedCategory === category.name ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedCategory(category.name)}
-                    disabled={categoryInventories[category.name] === 0}
-                    className="rounded-full h-8"
-                  >
-                    {category.name} ({categoryInventories[category.name] || 0})
-                  </Button>
-                ))}
-                
+                {categoriesData &&
+                  categoriesData.map((categoryName, index) => (
+                    <Button
+                      key={index}
+                      variant={
+                        selectedCategory === categoryName
+                          ? "default"
+                          : "outline"
+                      }
+                      size="sm"
+                      onClick={() => setSelectedCategory(categoryName)}
+                      disabled={categoryInventories[categoryName] === 0}
+                      className="rounded-full h-8"
+                    >
+                      {categoryName} ({categoryInventories[categoryName] || 0})
+                    </Button>
+                  ))}
+
                 {/* Loading categories indicator */}
                 {categoriesLoading && (
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    <span className="text-xs text-muted-foreground">Loading categories...</span>
+                    <span className="text-xs text-muted-foreground">
+                      Loading categories...
+                    </span>
                   </div>
                 )}
               </div>
@@ -428,34 +520,39 @@ export default function MarketplacePage() {
             {/* Results Info */}
             <div className="mb-6">
               <p className="text-muted-foreground">
-                {filteredAndSortedListings.length} result{filteredAndSortedListings.length !== 1 ? 's' : ''}
-                {selectedCategory !== 'all' && ` in ${selectedCategory}`}
+                {filteredAndSortedListings.length} result
+                {filteredAndSortedListings.length !== 1 ? "s" : ""}
+                {selectedCategory !== "all" && ` in ${selectedCategory}`}
                 {searchQuery && ` for "${searchQuery}"`}
               </p>
             </div>
 
             {/* Gift Cards Grid */}
             {filteredAndSortedListings.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredAndSortedListings.map((listing) => (
-                  <EnhancedGiftCard key={listing.id} listing={listing} />
-                ))}
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
+              {filteredAndSortedListings.map((listing) => (
+                <div key={listing.id} className="h-full">
+                  <EnhancedGiftCard listing={listing} />
+                </div>
+              ))}
+            </div>
             ) : (
               <div className="text-center py-16">
                 <div className="max-w-md mx-auto">
                   <ShoppingCart className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-foreground mb-2">No gift cards found</h3>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    No gift cards found
+                  </h3>
                   <p className="text-muted-foreground mb-6">
-                    {searchQuery || selectedCategory !== 'all' 
-                      ? "Try adjusting your search or category filter" 
+                    {searchQuery || selectedCategory !== "all"
+                      ? "Try adjusting your search or category filter"
                       : "No gift cards are currently available"}
                   </p>
-                  {(selectedCategory !== 'all' || searchQuery) && (
+                  {(selectedCategory !== "all" || searchQuery) && (
                     <Button
                       onClick={() => {
-                        setSelectedCategory('all');
-                        setSearchQuery('');
+                        setSelectedCategory("all");
+                        setSearchQuery("");
                       }}
                       variant="outline"
                     >
@@ -475,7 +572,9 @@ export default function MarketplacePage() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Contract Address:</span>
-                    <code className="text-foreground font-mono bg-background/50 px-2 py-1 rounded text-xs">0x8b15...E185</code>
+                    <code className="text-foreground font-mono bg-background/50 px-2 py-1 rounded text-xs">
+                      0x8b15...E185
+                    </code>
                   </div>
                   <div className="flex justify-between">
                     <span>Network:</span>
@@ -489,33 +588,36 @@ export default function MarketplacePage() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Total Active Listings:</span>
-                    <span className="text-foreground font-semibold">{transformedListings.length}</span>
+                    <span className="text-foreground font-semibold">
+                      {transformedListings.length}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Categories Available:</span>
-                    <span className="text-foreground font-semibold">{categoriesData?.length || 0}</span>
+                    <span className="text-foreground font-semibold">
+                      {categoriesData?.length || 0}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Categories Active:</span>
                     <span className="text-foreground font-semibold">
-                      {categoriesData?.filter(cat => cat.active).length || 0}
+                      {categoriesData?.length || 0}
                     </span>
                   </div>
                 </div>
               </div>
-              
+
               {/* Dynamic Categories List */}
               {categoriesData && categoriesData.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-border/30">
-                  <h4 className="text-sm font-semibold text-foreground mb-2">Available Categories:</h4>
+                  <h4 className="text-sm font-semibold text-foreground mb-2">
+                    Available Categories:
+                  </h4>
                   <div className="flex flex-wrap gap-2">
-                    {categoriesData.map(category => (
-                      <Badge 
-                        key={category.categoryId}
-                        variant="outline" 
-                        className="text-xs"
-                      >
-                        {category.name} ({categoryInventories[category.name] || 0})
+                    {categoriesData.map((categoryName, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {categoryName} ({categoryInventories[categoryName] || 0}
+                        )
                       </Badge>
                     ))}
                   </div>

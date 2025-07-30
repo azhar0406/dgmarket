@@ -82,14 +82,20 @@ This automatically handles:
 - ✅ Category and token configuration
 
 ### **7. Run Tests**
-```sh
-pnpm hardhat test --network baseSepolia
-```
-
-Or against Base Sepolia:
 
 ```sh
 pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia
+```
+### **8. Sync Frontend ABIs**
+
+```sh
+node scripts/sync-frontend-abis.js
+```
+
+### **9. Start Frontend**
+
+```sh
+cd .. && pnpm run dev
 ```
 
 ## **DGMarket Smart Contract System**

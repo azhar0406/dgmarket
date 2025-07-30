@@ -20,7 +20,7 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   
   // Base Sepolia token addresses
   const usdcAddress = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
-  const usdtAddress = "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"; // Base Sepolia USDT
+  // const usdtAddress = "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"; // Base Sepolia USDT
   
   // API configuration
   const okxApiBaseUrl = process.env.GIFT_CARD_API_URL || "http://13.235.164.47:8081";
@@ -30,7 +30,7 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   console.log("- DON ID:", chainlinkDonId);
   console.log("- Subscription ID:", chainlinkSubscriptionId);
   console.log("- USDC Address:", usdcAddress);
-  console.log("- USDT Address:", usdtAddress);
+  // console.log("- USDT Address:", usdtAddress);
   console.log("- API Base URL:", okxApiBaseUrl);
 
   // =============================================================================
@@ -76,7 +76,7 @@ const DGMarketCompleteModule = buildModule("DGMarketCompleteModule", (m) => {
   console.log("💰 Supported tokens configuration...");
   console.log("ℹ️  USDC and USDT are already configured in DGMarketCore constructor");
   console.log("- USDC Address:", usdcAddress);
-  console.log("- USDT Address:", usdtAddress);
+  // console.log("- USDT Address:", usdtAddress);
 
   // ✅ CONFIRMED: Skip adding tokens since they're already added in constructor
   // USDC and USDT are automatically added when DGMarketCore is deployed

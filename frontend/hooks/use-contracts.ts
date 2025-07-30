@@ -6,7 +6,10 @@ import { useMemo } from 'react';
 import DGMarketCoreContract from '../../contracts/artifacts/contracts/DGMarketCore.sol/DGMarketCore.json';
 const DGMarketCoreABI = DGMarketCoreContract.abi;
 
-const CONTRACT_ADDRESS = '0x74F4abD898D3701DFf5fD7AB8D7991122C0D612B' as const;
+// Import dynamic contract address
+import { CONTRACT_ADDRESSES } from '../lib/contract-addresses';
+
+const CONTRACT_ADDRESS = CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`;
 
 // Types based on confirmed contract structure
 export interface GiftCard {
@@ -124,36 +127,7 @@ export function useAllCategories() {
   };
 }
 
-// NEW: Hook to get all categories with complete data (IDs, counts, etc.)
-export function useAllCategoriesWithData() {
-  const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: DGMarketCoreABI,
-    functionName: 'getAllCategoriesWithData',
-  });
 
-  const processedData = useMemo(() => {
-    if (!data || !Array.isArray(data) || data.length !== 5) return [];
-    
-    const [categoryIds, categoryNames, categoryCounts, categoryThresholds, categoryActive] = data;
-    
-    if (!Array.isArray(categoryIds) || !Array.isArray(categoryNames)) return [];
-    
-    return categoryIds.map((id: bigint, index: number) => ({
-      categoryId: Number(id),
-      name: categoryNames[index] as string,
-      count: Number(categoryCounts[index] as bigint),
-      threshold: Number(categoryThresholds[index] as bigint),
-      active: categoryActive[index] as boolean,
-    })) as CategoryData[];
-  }, [data]);
-
-  return {
-    data: processedData,
-    isLoading,
-    error,
-  };
-}
 
 // NEW: Hook to get category count
 export function useCategoryCount() {
@@ -345,12 +319,75 @@ export function useSupportsInterface() {
   };
 }
 
-// Utility hook to get category statistics
 export function useCategoryStatistics() {
-  const { data: categoriesWithData, isLoading, error } = useAllCategoriesWithData();
+  // Get category names from the working hook
+  const { data: categoryNames, isLoading: namesLoading, error: namesError } = useAllCategories();
   
+  // Since we can't dynamically call hooks, we'll use a different approach
+  // We'll call getCategoryInventory for each known category individually
+  
+  const foodInventory = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryInventory',
+    args: ['Food & Dining'],
+  });
+
+  const shoppingInventory = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryInventory',
+    args: ['Shopping'],
+  });
+
+  const entertainmentInventory = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryInventory',
+    args: ['Entertainment'],
+  });
+
+  const travelInventory = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryInventory',
+    args: ['Travel'],
+  });
+
+  const gamingInventory = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: DGMarketCoreABI,
+    functionName: 'getCategoryInventory',
+    args: ['Gaming'],
+  });
+
   const statistics = useMemo(() => {
-    if (!categoriesWithData) return null;
+    if (!categoryNames) return null;
+    
+    // Check if all inventory data is loaded
+    const inventories = [foodInventory, shoppingInventory, entertainmentInventory, travelInventory, gamingInventory];
+    const allLoaded = inventories.every(inv => !inv.isLoading);
+    if (!allLoaded) return null;
+    
+    // Map category names to their inventory data
+    const categoryMap = {
+      'Food & Dining': foodInventory.data,
+      'Shopping': shoppingInventory.data,
+      'Entertainment': entertainmentInventory.data,
+      'Travel': travelInventory.data,
+      'Gaming': gamingInventory.data,
+    };
+    
+    // Combine category names with their inventory data
+    const categoriesWithData = categoryNames.map((name: string) => {
+      const inventory = categoryMap[name as keyof typeof categoryMap] as [bigint, bigint, boolean] | undefined;
+      return {
+        name,
+        count: inventory ? Number(inventory[0]) : 0,        // count (BigInt -> number)
+        threshold: inventory ? Number(inventory[1]) : 0,    // threshold (BigInt -> number)
+        active: inventory ? inventory[2] : true,            // active (boolean)
+      };
+    });
     
     const totalCards = categoriesWithData.reduce((sum, cat) => sum + cat.count, 0);
     const activeCategories = categoriesWithData.filter(cat => cat.active).length;
@@ -363,7 +400,10 @@ export function useCategoryStatistics() {
       categoriesNeedingRestock,
       categories: categoriesWithData,
     };
-  }, [categoriesWithData]);
+  }, [categoryNames, foodInventory.data, shoppingInventory.data, entertainmentInventory.data, travelInventory.data, gamingInventory.data]);
+
+  const isLoading = namesLoading || foodInventory.isLoading || shoppingInventory.isLoading || entertainmentInventory.isLoading || travelInventory.isLoading || gamingInventory.isLoading;
+  const error = namesError || foodInventory.error || shoppingInventory.error || entertainmentInventory.error || travelInventory.error || gamingInventory.error;
 
   return {
     data: statistics,
@@ -371,6 +411,5 @@ export function useCategoryStatistics() {
     error,
   };
 }
-
 // Export contract address and ABI for direct use
 export { CONTRACT_ADDRESS, DGMarketCoreABI };

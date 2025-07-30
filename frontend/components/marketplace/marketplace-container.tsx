@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { formatEther } from 'viem';
+import { formatEther, formatUnits } from 'viem';
 import { useActiveListings } from '@/hooks/use-contracts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -152,7 +152,7 @@ export function MarketplaceContainer() {
     return listings.map(listing => ({
       id: listing.cardId.toString(),
       title: listing.description,
-      price: parseFloat(formatEther(listing.publicPrice)),
+      price: parseFloat(formatUnits(listing.publicPrice, 6)),
       category: listing.category,
       image: listing.imageUrl || '/placeholder-gift-card.jpg',
       seller: listing.owner,

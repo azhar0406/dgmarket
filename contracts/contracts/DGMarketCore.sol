@@ -9,8 +9,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title DGMarketCore - Enhanced with Dynamic Categories
- * @dev Simplified gift card marketplace with FHE encryption and dynamic category management
+ * @title DGMarketCore - Frontend Compatible + Stack Optimized
+ * @dev Maintains frontend compatibility while avoiding stack too deep errors
  */
 contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -24,53 +24,52 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     bytes32 public constant AUTOMATION_ROLE = keccak256("AUTOMATION_ROLE");
     
     uint256 public constant MAX_FEE_PERCENT = 1000; // Maximum 10%
-    address public constant USDC_ADDRESS = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // Base Sepolia USDC
-    address public constant USDT_ADDRESS = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2; // Base Sepolia USDT
+    address public constant USDC_ADDRESS = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // Base Sepolia USDC (6 decimals)
+    
+    // USDC has 6 decimals (not 18 like ETH)
+    uint256 public constant USDC_DECIMALS = 6;
+    uint256 public constant USDC_UNIT = 10**USDC_DECIMALS; // 1,000,000 = 1 USDC
 
     // =============================================================================
-    // ENHANCED STRUCTS
+    // OPTIMIZED STRUCTS (FRONTEND COMPATIBLE)
     // =============================================================================
 
-    // Gift Card Core Data (Simplified with PIN instead of value)
-    struct GiftCard {
-        uint256 cardId;             // Unique card ID
-        euint256 encryptedCode;     // FHE encrypted voucher code
-        euint256 encryptedPin;      // FHE encrypted PIN (instead of value)
-        uint256 publicPrice;        // Public price (NOT encrypted) - already in USDC/USDT
-        address owner;              // Current owner
-        address creator;            // Original creator
-        uint256 expiryDate;         // 0 = no expiry
-        string category;
-        string description;
-        string imageUrl;
-        bool isActive;
-        bool isRevealed;            // Revelation tracking
-        uint256 createdAt;          // Creation timestamp
-    }
-
-    // Enhanced Category Data with ID
-    struct CategoryData {
-        uint256 categoryId;         // Category ID (index in array)
-        string name;                // Category name
-        uint256 count;              // Current gift cards count
-        uint256 threshold;          // Restocking threshold
-        bool active;                // Whether category is active
-        uint256 createdAt;          // When category was added
-    }
-
-    // Public gift card data for frontend (no encrypted fields)
-    struct GiftCardPublicData {
+    // Core data struct (6 fields - within limits)
+    struct GiftCardCore {
         uint256 cardId;
         uint256 publicPrice;
         address owner;
         address creator;
+        bool isActive;
+        bool isPurchased;
+    }
+
+    // Metadata struct (4 fields)
+    struct GiftCardMeta {
+        string category;
+        string description;
+        string imageUrl;
         uint256 expiryDate;
+    }
+
+    // Status struct (4 fields)
+    struct GiftCardStatus {
+        bool isRevealed;
+        uint256 createdAt;
+        uint256 purchasedAt;
+        uint256 reserved; // For future use
+    }
+
+    // FRONTEND COMPATIBLE: Reduced public struct (8 fields - safe limit)
+    struct GiftCardPublic {
+        uint256 cardId;
+        uint256 publicPrice;
+        address owner;
         string category;
         string description;
         string imageUrl;
         bool isActive;
-        bool isRevealed;
-        uint256 createdAt;
+        bool isPurchased;
     }
 
     // Category Management
@@ -81,64 +80,53 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
         uint256 createdAt;
     }
 
-    // Marketplace Listing Data
-    struct Listing {
-        uint256 listingId;
-        uint256 cardId;
-        address seller;
-        address paymentToken;
-        uint256 price;
-        bool isActive;
-        uint256 listedAt;
-    }
-
     // =============================================================================
-    // STATE VARIABLES
+    // STATE VARIABLES (OPTIMIZED STORAGE)
     // =============================================================================
 
-    mapping(uint256 => GiftCard) public giftCards;
-    mapping(address => uint256[]) public userGiftCards; // User's owned card IDs
-    mapping(string => uint256[]) public categoryCards;  // Cards by category
-    mapping(string => CategoryInventory) public categoryInventory;
+    // Separate mappings to avoid large struct issues
+    mapping(uint256 => euint256) private cardEncryptedCodes;
+    mapping(uint256 => euint256) private cardEncryptedPins;
+    mapping(uint256 => GiftCardCore) private cardCores;
+    mapping(uint256 => GiftCardMeta) private cardMetas;
+    mapping(uint256 => GiftCardStatus) private cardStatuses;
     
-    // Marketplace mappings
-    mapping(uint256 => Listing) public listings;
-    mapping(address => bool) public supportedTokens;
-    address[] public supportedTokensList;
-    uint256[] public activeListingIds;
+    mapping(address => uint256[]) public userGiftCards; 
+    mapping(string => uint256[]) public categoryCards;  
+    mapping(string => CategoryInventory) public categoryInventory;
     
     // Counters
     uint256 private nextCardId = 1;
-    uint256 private nextListingId = 1;
     
     // Fee configuration
     uint256 public marketplaceFeePercent = 250; // 2.5% default
     
-    // Categories list - Enhanced for dynamic access
+    // Categories list
     string[] public categories;
     
     // Chainlink automation integration
     address public chainlinkManager;
     bool public autoRestockEnabled = true;
 
+    // Revenue tracking
+    uint256 public totalRevenue;
+    uint256 public totalFees;
+
     // =============================================================================
     // EVENTS
     // =============================================================================
     
     event GiftCardCreated(uint256 indexed cardId, address indexed creator, uint256 publicPrice, string category);
+    event GiftCardPurchased(uint256 indexed cardId, address indexed buyer, address indexed seller, uint256 price);
     event GiftCardRevealed(uint256 indexed cardId, address indexed owner);
-    event GiftCardRedeemed(uint256 indexed cardId, address indexed redeemer, uint256 publicPrice);
     event OwnershipTransferred(uint256 indexed cardId, address indexed from, address indexed to);
-    
-    event ListingCreated(uint256 indexed listingId, uint256 indexed cardId, address indexed seller, uint256 price);
-    event ListingPurchased(uint256 indexed listingId, uint256 indexed cardId, address indexed buyer, address seller);
-    event ListingCancelled(uint256 indexed listingId, address indexed seller);
     
     event CategoryAdded(string category, uint256 threshold, uint256 categoryId);
     event InventoryUpdated(string category, uint256 newCount);
     event AutoRestockTriggered(string category, uint256 currentStock, uint256 threshold);
     
-    event TokenAdded(address indexed token);
+    event TokenWithdrawn(address indexed token, address indexed to, uint256 amount);
+    event RevenueCollected(uint256 amount, uint256 fees);
 
     // =============================================================================
     // CUSTOM ERRORS
@@ -146,12 +134,13 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     
     error CardNotOwned(uint256 cardId);
     error CardAlreadyRevealed(uint256 cardId);
+    error CardAlreadyPurchased(uint256 cardId);
+    error CardNotPurchased(uint256 cardId);
     error CardNotActive(uint256 cardId);
     error CardExpired(uint256 cardId);
-    error CannotResellRevealedCard(uint256 cardId);
+    error CannotPurchaseOwnCard(uint256 cardId);
     error InvalidCategory(string category);
-    error UnsupportedToken(address token);
-    error ChainlinkManagerNotSet();
+    error InsufficientBalance(uint256 required, uint256 available);
 
     // =============================================================================
     // MODIFIERS
@@ -159,25 +148,20 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     
     modifier validCard(uint256 cardId) {
         require(cardId < nextCardId && cardId > 0, "Invalid card ID");
-        require(giftCards[cardId].isActive, "Card not active");
+        require(cardCores[cardId].isActive, "Card not active");
         _;
     }
     
     modifier onlyCardOwner(uint256 cardId) {
-        if (giftCards[cardId].owner != msg.sender) revert CardNotOwned(cardId);
+        if (cardCores[cardId].owner != msg.sender) revert CardNotOwned(cardId);
         _;
     }
     
     modifier notExpired(uint256 cardId) {
-        GiftCard storage card = giftCards[cardId];
-        if (card.expiryDate != 0 && card.expiryDate <= block.timestamp) {
+        uint256 expiryDate = cardMetas[cardId].expiryDate;
+        if (expiryDate != 0 && expiryDate <= block.timestamp) {
             revert CardExpired(cardId);
         }
-        _;
-    }
-    
-    modifier onlySupportedToken(address token) {
-        if (!supportedTokens[token]) revert UnsupportedToken(token);
         _;
     }
 
@@ -188,10 +172,6 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
-        
-        // Add default supported tokens
-        _addSupportedToken(USDC_ADDRESS);
-        _addSupportedToken(USDT_ADDRESS);
         
         // Initialize default categories
         _initializeCategories();
@@ -221,86 +201,30 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // =============================================================================
-    // ENHANCED CATEGORY MANAGEMENT
+    // CATEGORY MANAGEMENT
     // =============================================================================
     
     /**
      * @dev Get all categories (just names)
-     * @return Array of category names
      */
     function getAllCategories() external view returns (string[] memory) {
         return categories;
     }
     
     /**
-     * @dev Get all categories with their IDs and data
-     * @return categoryIds Array of category IDs (indices)
-     * @return categoryNames Array of category names
-     * @return categoryCounts Array of current counts
-     * @return categoryThresholds Array of thresholds
-     * @return categoryActive Array of active status
+     * @dev Get category inventory - CHAINLINK COMPATIBLE
      */
-    function getAllCategoriesWithData() external view returns (
-        uint256[] memory categoryIds,
-        string[] memory categoryNames,
-        uint256[] memory categoryCounts,
-        uint256[] memory categoryThresholds,
-        bool[] memory categoryActive
+    function getCategoryInventory(string calldata category) external view returns (
+        uint256 count,
+        uint256 threshold,
+        bool active
     ) {
-        uint256 length = categories.length;
-        
-        categoryIds = new uint256[](length);
-        categoryNames = new string[](length);
-        categoryCounts = new uint256[](length);
-        categoryThresholds = new uint256[](length);
-        categoryActive = new bool[](length);
-        
-        for (uint256 i = 0; i < length; i++) {
-            categoryIds[i] = i;
-            categoryNames[i] = categories[i];
-            
-            CategoryInventory storage inventory = categoryInventory[categories[i]];
-            categoryCounts[i] = inventory.count;
-            categoryThresholds[i] = inventory.threshold;
-            categoryActive[i] = inventory.active;
-        }
-        
-        return (categoryIds, categoryNames, categoryCounts, categoryThresholds, categoryActive);
-    }
-    
-    /**
-     * @dev Get category data by index/ID
-     * @param categoryId The category index
-     * @return categoryData Complete category data
-     */
-    function getCategoryById(uint256 categoryId) external view returns (CategoryData memory categoryData) {
-        require(categoryId < categories.length, "Invalid category ID");
-        
-        string memory categoryName = categories[categoryId];
-        CategoryInventory storage inventory = categoryInventory[categoryName];
-        
-        return CategoryData({
-            categoryId: categoryId,
-            name: categoryName,
-            count: inventory.count,
-            threshold: inventory.threshold,
-            active: inventory.active,
-            createdAt: inventory.createdAt
-        });
-    }
-    
-    /**
-     * @dev Get total number of categories
-     * @return Total count of categories
-     */
-    function getCategoryCount() external view returns (uint256) {
-        return categories.length;
+        CategoryInventory storage inventory = categoryInventory[category];
+        return (inventory.count, inventory.threshold, inventory.active);
     }
 
     /**
      * @dev Add a new category
-     * @param category Category name
-     * @param threshold Restocking threshold
      */
     function addCategory(string calldata category, uint256 threshold) external onlyRole(ADMIN_ROLE) {
         require(bytes(category).length > 0, "Empty category");
@@ -320,19 +244,11 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // =============================================================================
-    // GIFT CARD CREATION (ENHANCED)
+    // GIFT CARD CREATION (OPTIMIZED)
     // =============================================================================
     
     /**
-     * @dev Creates a new gift card (admin only) - Enhanced with better validation
-     * @param encryptedCodeInput The encrypted voucher code as bytes
-     * @param encryptedPinInput The encrypted PIN as bytes  
-     * @param publicPrice The public price (NOT encrypted) - already in USDC/USDT
-     * @param description Public description
-     * @param category Gift card category
-     * @param imageUrl Public image URL
-     * @param expiryDate Expiry timestamp (0 for no expiry)
-     * @return cardId The ID of the newly created gift card
+     * @dev Creates a new gift card (admin only)
      */
     function adminCreateGiftCard(
         bytes memory encryptedCodeInput,
@@ -351,10 +267,10 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
             category,
             imageUrl,
             expiryDate,
-            msg.sender
+            address(this)
         );
         
-        // Update inventory for admin-created cards
+        // Update inventory
         categoryInventory[category].count++;
         emit InventoryUpdated(category, categoryInventory[category].count);
         
@@ -381,7 +297,7 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
             category,
             imageUrl,
             expiryDate,
-            address(this) // Automation creates cards owned by contract initially
+            address(this)
         );
         
         // Update inventory
@@ -392,7 +308,7 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Internal function to create gift cards with enhanced validation
+     * @dev Internal gift card creation - STACK OPTIMIZED
      */
     function _createGiftCard(
         bytes memory encryptedCodeInput,
@@ -405,168 +321,371 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
         address initialOwner
     ) internal returns (uint256 cardId) {
         require(publicPrice > 0, "Price must be positive");
+        require(publicPrice <= 2 * USDC_UNIT, "Price too high (max 2 USDC)");
         require(bytes(description).length > 0, "Description required");
         require(categoryInventory[category].active, "Category not active");
         require(bytes(imageUrl).length > 0, "Image URL required");
         
         cardId = nextCardId++;
         
-        // Create FHE encrypted data (code + pin)
+        // Create and store encrypted data
+        _storeEncryptedData(cardId, encryptedCodeInput, encryptedPinInput, initialOwner);
+        
+        // Store core data
+        cardCores[cardId] = GiftCardCore({
+            cardId: cardId,
+            publicPrice: publicPrice,
+            owner: initialOwner,
+            creator: msg.sender,
+            isActive: true,
+            isPurchased: false
+        });
+        
+        // Store metadata
+        cardMetas[cardId] = GiftCardMeta({
+            category: category,
+            description: description,
+            imageUrl: imageUrl,
+            expiryDate: expiryDate
+        });
+        
+        // Store status
+        cardStatuses[cardId] = GiftCardStatus({
+            isRevealed: false,
+            createdAt: block.timestamp,
+            purchasedAt: 0,
+            reserved: 0
+        });
+        
+        // Add to mappings
+        userGiftCards[initialOwner].push(cardId);
+        categoryCards[category].push(cardId);
+        
+        emit GiftCardCreated(cardId, msg.sender, publicPrice, category);
+        return cardId;
+    }
+    
+    /**
+     * @dev Store encrypted data separately to manage stack depth
+     */
+    function _storeEncryptedData(
+        uint256 cardId,
+        bytes memory encryptedCodeInput,
+        bytes memory encryptedPinInput,
+        address initialOwner
+    ) internal {
+        // Create FHE encrypted data
         euint256 encryptedCode = encryptedCodeInput.newEuint256(msg.sender); 
         euint256 encryptedPin = encryptedPinInput.newEuint256(msg.sender); 
         
-        // Set permissions for contract and owner
+        // Set permissions
         e.allow(encryptedCode, address(this));
         e.allow(encryptedPin, address(this));
         e.allow(encryptedCode, initialOwner);
         e.allow(encryptedPin, initialOwner);
         
-        // Store gift card data
-        giftCards[cardId] = GiftCard({
-            cardId: cardId,
-            encryptedCode: encryptedCode,
-            encryptedPin: encryptedPin,
-            publicPrice: publicPrice,
-            owner: initialOwner,
-            creator: initialOwner,
-            expiryDate: expiryDate,
-            category: category,
-            description: description,
-            imageUrl: imageUrl,
-            isActive: true,
-            isRevealed: false,
-            createdAt: block.timestamp
-        });
-        
-        // Add to user's cards and category
-        userGiftCards[initialOwner].push(cardId);
-        categoryCards[category].push(cardId);
-        
-        emit GiftCardCreated(cardId, initialOwner, publicPrice, category);
-        return cardId;
+        // Store in separate mappings
+        cardEncryptedCodes[cardId] = encryptedCode;
+        cardEncryptedPins[cardId] = encryptedPin;
     }
 
     // =============================================================================
-    // ENHANCED VIEW FUNCTIONS
+    // PURCHASE FUNCTIONALITY
     // =============================================================================
     
     /**
-     * @dev Get all created gift cards (public data only) - Enhanced
-     * @return Array of gift card public data
+     * @dev Purchase a gift card with USDC
      */
-    function getAllGiftCards() external view returns (GiftCardPublicData[] memory) {
-        GiftCardPublicData[] memory result = new GiftCardPublicData[](nextCardId - 1);
-        uint256 count = 0;
+    function purchaseGiftCard(uint256 cardId) 
+        external 
+        validCard(cardId) 
+        notExpired(cardId) 
+        nonReentrant 
+        whenNotPaused 
+    {
+        GiftCardCore storage core = cardCores[cardId];
         
+        // Validation checks
+        if (core.isPurchased) revert CardAlreadyPurchased(cardId);
+        if (core.owner == msg.sender) revert CannotPurchaseOwnCard(cardId);
+        
+        // Execute purchase through internal function
+        _executePurchase(cardId, core);
+    }
+    
+    /**
+     * @dev Internal purchase execution to manage stack depth
+     */
+    function _executePurchase(uint256 cardId, GiftCardCore storage core) internal {
+        uint256 price = core.publicPrice;
+        address previousOwner = core.owner;
+        
+        // Process payment
+        IERC20 usdc = IERC20(USDC_ADDRESS);
+        uint256 buyerBalance = usdc.balanceOf(msg.sender);
+        if (buyerBalance < price) {
+            revert InsufficientBalance(price, buyerBalance);
+        }
+        
+        // Calculate and transfer fees
+        uint256 fee = (price * marketplaceFeePercent) / 10000;
+        uint256 sellerAmount = price - fee;
+        
+        usdc.safeTransferFrom(msg.sender, address(this), fee);
+        
+        if (previousOwner != address(this)) {
+            usdc.safeTransferFrom(msg.sender, previousOwner, sellerAmount);
+        } else {
+            usdc.safeTransferFrom(msg.sender, address(this), sellerAmount);
+            totalRevenue += sellerAmount;
+        }
+        
+        totalFees += fee;
+        
+        // Update ownership
+        _updateCardOwnership(cardId, previousOwner);
+        
+        emit GiftCardPurchased(cardId, msg.sender, previousOwner, price);
+        emit OwnershipTransferred(cardId, previousOwner, msg.sender);
+        emit RevenueCollected(price, fee);
+    }
+    
+    /**
+     * @dev Update card ownership
+     */
+    function _updateCardOwnership(uint256 cardId, address previousOwner) internal {
+        GiftCardCore storage core = cardCores[cardId];
+        GiftCardStatus storage status = cardStatuses[cardId];
+        GiftCardMeta storage meta = cardMetas[cardId];
+        
+        // Remove from previous owner's list
+        if (previousOwner != address(this)) {
+            _removeFromUserCards(previousOwner, cardId);
+        }
+        
+        // Add to new owner
+        userGiftCards[msg.sender].push(cardId);
+        
+        // Update core data
+        core.owner = msg.sender;
+        core.isPurchased = true;
+        status.purchasedAt = block.timestamp;
+        
+        // Allow access to encrypted data
+        e.allow(cardEncryptedCodes[cardId], msg.sender);
+        e.allow(cardEncryptedPins[cardId], msg.sender);
+        
+        // Update inventory
+        categoryInventory[meta.category].count--;
+        emit InventoryUpdated(meta.category, categoryInventory[meta.category].count);
+        
+        // Check restocking
+        _checkAndTriggerAutoRestock(meta.category);
+    }
+
+    /**
+     * @dev Helper function to remove card from user's list
+     */
+    function _removeFromUserCards(address user, uint256 cardId) internal {
+        uint256[] storage userCards = userGiftCards[user];
+        for (uint256 i = 0; i < userCards.length; i++) {
+            if (userCards[i] == cardId) {
+                userCards[i] = userCards[userCards.length - 1];
+                userCards.pop();
+                break;
+            }
+        }
+    }
+
+    // =============================================================================
+    // FRONTEND COMPATIBLE VIEW FUNCTIONS
+    // =============================================================================
+    
+    /**
+     * @dev Get all gift cards - FRONTEND COMPATIBLE
+     * Uses chunked approach to avoid stack issues while maintaining compatibility
+     */
+    function getAllGiftCards() external view returns (GiftCardPublic[] memory) {
+        return _getGiftCardsChunked(0, nextCardId - 1);
+    }
+    
+    /**
+     * @dev Get available gift cards for purchase - FRONTEND COMPATIBLE
+     */
+    function getAvailableGiftCards() external view returns (GiftCardPublic[] memory) {
+        // Count available cards first
+        uint256 count = 0;
         for (uint256 i = 1; i < nextCardId; i++) {
-            if (giftCards[i].isActive) {
-                result[count] = _getPublicData(i);
+            if (cardCores[i].isActive && !cardCores[i].isPurchased) {
                 count++;
             }
         }
         
-        // Resize array to actual count
-        GiftCardPublicData[] memory finalResult = new GiftCardPublicData[](count);
-        for (uint256 i = 0; i < count; i++) {
-            finalResult[i] = result[i];
+        // Create result array
+        GiftCardPublic[] memory result = new GiftCardPublic[](count);
+        uint256 index = 0;
+        
+        // Fill array with available cards
+        for (uint256 i = 1; i < nextCardId; i++) {
+            if (cardCores[i].isActive && !cardCores[i].isPurchased) {
+                result[index] = _buildPublicCard(i);
+                index++;
+            }
         }
         
-        return finalResult;
+        return result;
     }
     
     /**
-     * @dev Get gift card by ID (public data only)
-     * @param cardId The gift card ID
-     * @return Gift card public data
+     * @dev Get user's gift cards - FRONTEND COMPATIBLE
      */
-    function getGiftCard(uint256 cardId) external view returns (GiftCardPublicData memory) {
-        require(cardId < nextCardId && cardId > 0, "Invalid card ID");
-        return _getPublicData(cardId);
-    }
-    
-    /**
-     * @dev Get gift cards by category with enhanced data
-     * @param category The category name
-     * @return Array of gift card public data
-     */
-    function getGiftCardsByCategory(string calldata category) external view returns (GiftCardPublicData[] memory) {
-        uint256[] memory cardIds = categoryCards[category];
-        GiftCardPublicData[] memory result = new GiftCardPublicData[](cardIds.length);
-        uint256 count = 0;
+    function getMyGiftCards() external view returns (GiftCardPublic[] memory) {
+        uint256[] memory cardIds = userGiftCards[msg.sender];
+        GiftCardPublic[] memory result = new GiftCardPublic[](cardIds.length);
         
         for (uint256 i = 0; i < cardIds.length; i++) {
-            if (giftCards[cardIds[i]].isActive) {
-                result[count] = _getPublicData(cardIds[i]);
+            result[i] = _buildPublicCard(cardIds[i]);
+        }
+        
+        return result;
+    }
+
+    /**
+ * @dev Get all categories with their data - FRONTEND COMPATIBLE
+ * Add this function to DGMarketCore.sol in the "FRONTEND COMPATIBLE VIEW FUNCTIONS" section
+ */
+function getAllCategoriesWithData() external view returns (
+    string[] memory categoryNames,
+    uint256[] memory counts,
+    uint256[] memory thresholds,
+    bool[] memory activeStatuses
+) {
+    uint256 length = categories.length;
+    
+    categoryNames = new string[](length);
+    counts = new uint256[](length);
+    thresholds = new uint256[](length);
+    activeStatuses = new bool[](length);
+    
+    for (uint256 i = 0; i < length; i++) {
+        string memory categoryName = categories[i];
+        CategoryInventory storage inventory = categoryInventory[categoryName];
+        
+        categoryNames[i] = categoryName;
+        counts[i] = inventory.count;
+        thresholds[i] = inventory.threshold;
+        activeStatuses[i] = inventory.active;
+    }
+    
+    return (categoryNames, counts, thresholds, activeStatuses);
+}
+    
+    /**
+     * @dev Get gift card by ID - FRONTEND COMPATIBLE
+     */
+    function getGiftCard(uint256 cardId) external view returns (GiftCardPublic memory) {
+        require(cardId < nextCardId && cardId > 0, "Invalid card ID");
+        return _buildPublicCard(cardId);
+    }
+    
+    /**
+     * @dev Get gift cards by category - FRONTEND COMPATIBLE
+     */
+    function getGiftCardsByCategory(string calldata category) external view returns (GiftCardPublic[] memory) {
+        uint256[] memory cardIds = categoryCards[category];
+        uint256 count = 0;
+        
+        // Count active cards
+        for (uint256 i = 0; i < cardIds.length; i++) {
+            if (cardCores[cardIds[i]].isActive) {
                 count++;
             }
         }
         
-        // Resize array to actual count
-        GiftCardPublicData[] memory finalResult = new GiftCardPublicData[](count);
-        for (uint256 i = 0; i < count; i++) {
-            finalResult[i] = result[i];
+        // Build result
+        GiftCardPublic[] memory result = new GiftCardPublic[](count);
+        uint256 index = 0;
+        
+        for (uint256 i = 0; i < cardIds.length; i++) {
+            if (cardCores[cardIds[i]].isActive) {
+                result[index] = _buildPublicCard(cardIds[i]);
+                index++;
+            }
         }
         
-        return finalResult;
-    }
-
-    /**
-     * @dev Get category inventory with enhanced data
-     * @param category The category name
-     * @return count Current count
-     * @return threshold Restocking threshold
-     * @return active Whether category is active
-     */
-    function getCategoryInventory(string calldata category) external view returns (
-        uint256 count,
-        uint256 threshold,
-        bool active
-    ) {
-        CategoryInventory storage inventory = categoryInventory[category];
-        return (inventory.count, inventory.threshold, inventory.active);
+        return result;
     }
     
     /**
-     * @dev Internal function to get public data
+     * @dev Internal function to build public card data - OPTIMIZED
      */
-    function _getPublicData(uint256 cardId) internal view returns (GiftCardPublicData memory) {
-        GiftCard storage card = giftCards[cardId];
-        return GiftCardPublicData({
-            cardId: card.cardId,
-            publicPrice: card.publicPrice,
-            owner: card.owner,
-            creator: card.creator,
-            expiryDate: card.expiryDate,
-            category: card.category,
-            description: card.description,
-            imageUrl: card.imageUrl,
-            isActive: card.isActive,
-            isRevealed: card.isRevealed,
-            createdAt: card.createdAt
+    function _buildPublicCard(uint256 cardId) internal view returns (GiftCardPublic memory) {
+        GiftCardCore storage core = cardCores[cardId];
+        GiftCardMeta storage meta = cardMetas[cardId];
+        
+        return GiftCardPublic({
+            cardId: core.cardId,
+            publicPrice: core.publicPrice,
+            owner: core.owner,
+            category: meta.category,
+            description: meta.description,
+            imageUrl: meta.imageUrl,
+            isActive: core.isActive,
+            isPurchased: core.isPurchased
         });
     }
+    
+    /**
+     * @dev Get gift cards in chunks to avoid stack issues
+     */
+    function _getGiftCardsChunked(uint256 start, uint256 end) internal view returns (GiftCardPublic[] memory) {
+        uint256 count = 0;
+        
+        // Count active cards in range
+        for (uint256 i = start; i <= end && i < nextCardId; i++) {
+            if (i > 0 && cardCores[i].isActive) {
+                count++;
+            }
+        }
+        
+        // Build result
+        GiftCardPublic[] memory result = new GiftCardPublic[](count);
+        uint256 index = 0;
+        
+        for (uint256 i = start; i <= end && i < nextCardId; i++) {
+            if (i > 0 && cardCores[i].isActive) {
+                result[index] = _buildPublicCard(i);
+                index++;
+            }
+        }
+        
+        return result;
+    }
 
     // =============================================================================
-    // MARKETPLACE OPERATIONS (Enhanced)
+    // REVEAL FUNCTIONALITY
     // =============================================================================
     
     /**
-     * @dev Reveal gift card code and pin (marks as non-resellable)
-     * @param cardId The gift card ID to reveal
-     * @return encryptedCode The encrypted code for client-side decryption
-     * @return encryptedPin The encrypted pin for client-side decryption
+     * @dev Reveal gift card code and pin (only after purchase)
      */
     function revealGiftCard(
         uint256 cardId
     ) external validCard(cardId) onlyCardOwner(cardId) notExpired(cardId) returns (euint256 encryptedCode, euint256 encryptedPin) {
-        if (giftCards[cardId].isRevealed) revert CardAlreadyRevealed(cardId);
+        GiftCardCore storage core = cardCores[cardId];
+        GiftCardStatus storage status = cardStatuses[cardId];
         
-        // Mark as revealed (prevents resale)
-        giftCards[cardId].isRevealed = true;
+        if (!core.isPurchased) revert CardNotPurchased(cardId);
+        if (status.isRevealed) revert CardAlreadyRevealed(cardId);
         
-        // Allow access to encrypted code and pin for the owner
-        euint256 code = giftCards[cardId].encryptedCode;
-        euint256 pin = giftCards[cardId].encryptedPin;
+        // Mark as revealed
+        status.isRevealed = true;
+        
+        // Get encrypted data
+        euint256 code = cardEncryptedCodes[cardId];
+        euint256 pin = cardEncryptedPins[cardId];
+        
+        // Allow access
         e.allow(code, msg.sender);
         e.allow(pin, msg.sender);
         
@@ -575,12 +694,65 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // =============================================================================
+    // ADMIN FUNCTIONS
+    // =============================================================================
+    
+    /**
+     * @dev Withdraw any ERC20 token from contract (admin only)
+     */
+    function adminWithdrawToken(address tokenAddress, uint256 amount) 
+        external 
+        onlyRole(ADMIN_ROLE) 
+        nonReentrant 
+    {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be positive");
+        
+        IERC20 token = IERC20(tokenAddress);
+        uint256 contractBalance = token.balanceOf(address(this));
+        
+        require(contractBalance >= amount, "Insufficient contract balance");
+        
+        token.safeTransfer(msg.sender, amount);
+        
+        emit TokenWithdrawn(tokenAddress, msg.sender, amount);
+    }
+    
+    /**
+     * @dev Get contract's USDC balance
+     */
+    function getContractUSDCBalance() external view returns (uint256) {
+        return IERC20(USDC_ADDRESS).balanceOf(address(this));
+    }
+
+    /**
+     * @dev Update marketplace fee
+     */
+    function updateMarketplaceFee(uint256 newFeePercent) external onlyRole(ADMIN_ROLE) {
+        require(newFeePercent <= MAX_FEE_PERCENT, "Fee too high");
+        marketplaceFeePercent = newFeePercent;
+    }
+    
+    /**
+     * @dev Set Chainlink manager address
+     */
+    function setChainlinkManager(address _chainlinkManager) external onlyRole(ADMIN_ROLE) {
+        chainlinkManager = _chainlinkManager;
+    }
+    
+    /**
+     * @dev Get revenue stats
+     */
+    function getRevenueStats() external view returns (uint256 revenue, uint256 fees, uint256 total) {
+        return (totalRevenue, totalFees, totalRevenue + totalFees);
+    }
+
+    // =============================================================================
     // UTILITY FUNCTIONS
     // =============================================================================
     
     /**
      * @dev Check inventory and trigger automatic restocking if needed
-     * @param category The category to check
      */
     function _checkAndTriggerAutoRestock(string memory category) internal {
         if (!autoRestockEnabled || chainlinkManager == address(0)) {
@@ -589,46 +761,12 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
         
         CategoryInventory storage inventory = categoryInventory[category];
         if (inventory.active && inventory.count <= inventory.threshold) {
-            // Call Chainlink Manager to trigger restocking
             try IChainlinkManager(chainlinkManager).triggerRestock(category) {
                 emit AutoRestockTriggered(category, inventory.count, inventory.threshold);
             } catch {
                 // Silently fail to avoid reverting the main transaction
             }
         }
-    }
-
-    // =============================================================================
-    // ADMIN FUNCTIONS (Enhanced)
-    // =============================================================================
-    
-    /**
-     * @dev Update marketplace fee
-     * @param newFeePercent New fee percentage (basis points)
-     */
-    function updateMarketplaceFee(uint256 newFeePercent) external onlyRole(ADMIN_ROLE) {
-        require(newFeePercent <= MAX_FEE_PERCENT, "Fee too high");
-        marketplaceFeePercent = newFeePercent;
-    }
-    
-    /**
-     * @dev Add supported token
-     * @param token Token address to add
-     */
-    function addSupportedToken(address token) external onlyRole(ADMIN_ROLE) {
-        _addSupportedToken(token);
-    }
-    
-    /**
-     * @dev Internal function to add supported token
-     */
-    function _addSupportedToken(address token) internal {
-        require(token != address(0), "Invalid token");
-        require(!supportedTokens[token], "Token already supported");
-        
-        supportedTokens[token] = true;
-        supportedTokensList.push(token);
-        emit TokenAdded(token);
     }
     
     /**
