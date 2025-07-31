@@ -4,36 +4,14 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * DGMarket Frontend ABI Sync Script - FIXED VERSION
- * 
- * Simplified script that only handles ABI synchronization:
- * 1. Extracts ABIs from deployment artifacts
- * 2. Updates frontend ABI files  
- * 3. Validates ABI functions
- * 4. Creates backups of existing files
- * 
- * NOTE: Contract addresses are handled via direct import in frontend
+ * FIXED PATH ABI SYNC - Target the correct directory where frontend imports from
  */
 
-const CHAIN_ID = '84532'; // Base Sepolia
+const CHAIN_ID = '84532';
 const DEPLOYMENT_DIR = `ignition/deployments/chain-${CHAIN_ID}`;
-const FRONTEND_DIR = '../../frontend';
+// 🎯 FIXED: Point to the correct frontend directory where frontend actually imports from
+const FRONTEND_DIR = '../../dgmarket/frontend';
 
-// Contract configurations
-const CONTRACTS = {
-  DGMarketCore: {
-    artifactPath: `${DEPLOYMENT_DIR}/artifacts/DGMarketCompleteModule#DGMarketCore.json`,
-    abiOutputPath: `${FRONTEND_DIR}/lib/abis/DGMarketCore.json`,
-  },
-  ChainlinkGiftCardManager: {
-    artifactPath: `${DEPLOYMENT_DIR}/artifacts/DGMarketCompleteModule#ChainlinkGiftCardManager.json`,
-    abiOutputPath: `${FRONTEND_DIR}/lib/abis/ChainlinkGiftCardManager.json`,
-  }
-};
-
-/**
- * Colors for console output
- */
 const colors = {
   red: '\x1b[31m',
   green: '\x1b[32m',
@@ -49,277 +27,145 @@ function log(message, color = 'white') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
-/**
- * Create backup of existing file
- */
-function createBackup(filePath) {
-  if (fs.existsSync(filePath)) {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = `${filePath}.backup-${timestamp}`;
-    fs.copyFileSync(filePath, backupPath);
-    log(`📦 Backup created: ${path.basename(backupPath)}`, 'yellow');
-    return backupPath;
-  }
-  return null;
-}
-
-/**
- * Extract ABI from deployment artifact
- */
-function extractABI(artifactPath) {
-  try {
-    log(`🔍 Reading: ${path.basename(artifactPath)}`, 'blue');
-    
-    if (!fs.existsSync(artifactPath)) {
-      throw new Error(`Artifact not found: ${artifactPath}`);
-    }
-
-    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-    
-    if (!artifact.abi) {
-      throw new Error(`No ABI found in artifact`);
-    }
-
-    const functionCount = artifact.abi.filter(item => item.type === 'function').length;
-    log(`✅ ABI extracted: ${functionCount} functions`, 'green');
-    return artifact.abi;
-    
-  } catch (error) {
-    log(`❌ Failed to extract ABI: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-/**
- * Write ABI to frontend file
- */
-function writeABI(abi, outputPath) {
-  try {
-    // Create directory if it doesn't exist
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      log(`📁 Created directory: ${path.relative(process.cwd(), dir)}`, 'cyan');
-    }
-
-    // Create backup
-    createBackup(outputPath);
-
-    // Write ABI file
-    fs.writeFileSync(outputPath, JSON.stringify(abi, null, 2));
-    log(`✅ ABI saved: ${path.relative(process.cwd(), outputPath)}`, 'green');
-    
-  } catch (error) {
-    log(`❌ Failed to write ABI: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-/**
- * Extract contract addresses for validation (not updating files)
- */
-function validateAddresses() {
-  try {
-    const addressesPath = `${DEPLOYMENT_DIR}/deployed_addresses.json`;
-    log(`🔍 Validating deployment addresses...`, 'blue');
-    
-    if (!fs.existsSync(addressesPath)) {
-      throw new Error(`Addresses file not found: ${addressesPath}`);
-    }
-
-    const addresses = JSON.parse(fs.readFileSync(addressesPath, 'utf8'));
-    
-    const coreAddress = addresses['DGMarketCompleteModule#DGMarketCore'];
-    const managerAddress = addresses['DGMarketCompleteModule#ChainlinkGiftCardManager'];
-    
-    if (!coreAddress || !managerAddress) {
-      throw new Error('Missing contract addresses in deployment file');
-    }
-    
-    log(`✅ DGMarketCore: ${coreAddress}`, 'green');
-    log(`✅ ChainlinkManager: ${managerAddress}`, 'green');
-    log(`💡 Addresses are handled via direct import in frontend`, 'cyan');
-    
-    return addresses;
-    
-  } catch (error) {
-    log(`❌ Failed to validate addresses: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-/**
- * Update constants file with admin address if missing
- */
-function updateConstants() {
-  try {
-    const constantsPath = `${FRONTEND_DIR}/lib/constants.ts`;
-    
-    if (!fs.existsSync(constantsPath)) {
-      log(`📝 Creating constants.ts file...`, 'cyan');
-      
-      const constantsContent = `// DGMarket Frontend Constants
-
-// USDC Configuration (Base Sepolia)
-export const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-export const USDC_DECIMALS = 6;
-
-// Admin Configuration - Replace with your actual admin wallet
-export const ADMIN_WALLET_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_WALLET_ADDRESS || '';
-
-// Network Configuration
-export const SUPPORTED_CHAIN_ID = 84532; // Base Sepolia
-
-// Gift Card Categories
-export const GIFT_CARD_CATEGORIES = [
-  'Food & Dining',
-  'Shopping', 
-  'Gaming',
-  'Travel',
-  'Entertainment'
-] as const;
-
-export type GiftCardCategory = typeof GIFT_CARD_CATEGORIES[number];
-`;
-
-      const dir = path.dirname(constantsPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      fs.writeFileSync(constantsPath, constantsContent);
-      log(`✅ Constants created: ${path.relative(process.cwd(), constantsPath)}`, 'green');
-      log(`⚠️ Remember to set NEXT_PUBLIC_ADMIN_WALLET_ADDRESS in your .env.local`, 'yellow');
-    } else {
-      // Check if ADMIN_WALLET_ADDRESS exists
-      const content = fs.readFileSync(constantsPath, 'utf8');
-      if (!content.includes('ADMIN_WALLET_ADDRESS')) {
-        log(`⚠️ ADMIN_WALLET_ADDRESS missing from constants.ts`, 'yellow');
-        log(`💡 Add this line: export const ADMIN_WALLET_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_WALLET_ADDRESS || '';`, 'yellow');
-      } else {
-        log(`✅ Constants file looks good`, 'green');
-      }
-    }
-    
-  } catch (error) {
-    log(`❌ Error updating constants: ${error.message}`, 'red');
-  }
-}
-
-/**
- * Validate that all required functions exist in ABIs (FIXED)
- */
-function validateABIs() {
-  log(`🔍 Validating ABI files...`, 'blue');
+function fixPathAndSync() {
+  log('🎯 FIXED PATH ABI SYNC', 'magenta');
+  log('======================', 'magenta');
+  log('Now targeting the CORRECT directory where frontend imports from\n', 'cyan');
   
-  // FIXED: Removed automationCreateGiftCard from ChainlinkGiftCardManager
-  const requiredFunctions = {
-    DGMarketCore: [
-      'getAllGiftCards', 
-      'purchaseGiftCard', 
-      'getAllCategoriesWithData',
-      'automationCreateGiftCard'  // ✅ This belongs to DGMarketCore
-    ],
-    ChainlinkGiftCardManager: [
-      'triggerRestock',
-      'requestRestock', 
-      'batchCheckRestock'
-      // ❌ REMOVED: automationCreateGiftCard (this belongs to DGMarketCore only)
-    ]
-  };
-
-  for (const [contractName, config] of Object.entries(CONTRACTS)) {
-    try {
-      if (!fs.existsSync(config.abiOutputPath)) {
-        throw new Error(`ABI file missing: ${config.abiOutputPath}`);
-      }
-
-      const abi = JSON.parse(fs.readFileSync(config.abiOutputPath, 'utf8'));
-      const functionNames = abi
-        .filter(item => item.type === 'function')
-        .map(item => item.name);
-
-      if (requiredFunctions[contractName]) {
-        const missing = requiredFunctions[contractName].filter(fn => !functionNames.includes(fn));
-        if (missing.length > 0) {
-          log(`⚠️ ${contractName} missing functions: ${missing.join(', ')}`, 'yellow');
-        } else {
-          log(`✅ ${contractName} has all required functions`, 'green');
+  const abisDir = path.resolve(`${FRONTEND_DIR}/lib/abis`);
+  log(`📁 Target directory: ${abisDir}`, 'cyan');
+  
+  // Check current files in the target directory
+  log('\n📄 Current files in TARGET directory:', 'yellow');
+  if (fs.existsSync(abisDir)) {
+    const files = fs.readdirSync(abisDir);
+    files.forEach(file => {
+      const filePath = path.join(abisDir, file);
+      const stats = fs.statSync(filePath);
+      log(`   - ${file} (${stats.size} bytes, ${stats.mtime})`, 'white');
+      
+      // Check DGMarketCore specifically
+      if (file === 'DGMarketCore.json') {
+        try {
+          const abi = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const purchaseFunction = abi.find(fn => fn.type === 'function' && fn.name === 'purchaseGiftCard');
+          if (purchaseFunction) {
+            log(`     🎯 OLD purchaseGiftCard: ${purchaseFunction.inputs?.length || 0} inputs (WILL BE UPDATED)`, 'red');
+          }
+        } catch (e) {
+          log(`     ⚠️ Cannot read current ABI`, 'yellow');
         }
       }
-
-      log(`✅ ${contractName}: ${functionNames.length} functions validated`, 'green');
+    });
+  } else {
+    log('❌ Target directory does not exist!', 'red');
+    return;
+  }
+  
+  // Now update the ABIs in the correct location
+  const contracts = {
+    DGMarketCore: {
+      artifactPath: `${DEPLOYMENT_DIR}/artifacts/DGMarketCompleteModule#DGMarketCore.json`,
+      abiOutputPath: `${FRONTEND_DIR}/lib/abis/DGMarketCore.json`,
+    },
+    ChainlinkGiftCardManager: {
+      artifactPath: `${DEPLOYMENT_DIR}/artifacts/DGMarketCompleteModule#ChainlinkGiftCardManager.json`,
+      abiOutputPath: `${FRONTEND_DIR}/lib/abis/ChainlinkGiftCardManager.json`,
+    }
+  };
+  
+  log('\n🔄 UPDATING ABIs IN CORRECT LOCATION:', 'yellow');
+  
+  for (const [contractName, config] of Object.entries(contracts)) {
+    log(`\n🔧 Processing ${contractName}:`, 'yellow');
+    
+    const artifactPath = path.resolve(config.artifactPath);
+    if (!fs.existsSync(artifactPath)) {
+      log(`❌ Artifact not found: ${artifactPath}`, 'red');
+      continue;
+    }
+    
+    try {
+      // Read artifact
+      const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+      if (!artifact.abi) {
+        log(`❌ No ABI in artifact`, 'red');
+        continue;
+      }
+      
+      const functions = artifact.abi.filter(item => item.type === 'function');
+      log(`📖 Found ${functions.length} functions in artifact`, 'cyan');
+      
+      // Check purchaseGiftCard in artifact
+      if (contractName === 'DGMarketCore') {
+        const purchaseFunction = functions.find(fn => fn.name === 'purchaseGiftCard');
+        if (purchaseFunction) {
+          log(`🎯 NEW purchaseGiftCard: ${purchaseFunction.inputs?.length || 0} inputs`, 'green');
+          if (purchaseFunction.inputs) {
+            purchaseFunction.inputs.forEach((input, i) => {
+              log(`   ${i + 1}. ${input.name}: ${input.type}`, 'white');
+            });
+          }
+        }
+      }
+      
+      // Write to correct location
+      const outputPath = path.resolve(config.abiOutputPath);
+      log(`💾 Writing to CORRECT location: ${outputPath}`, 'cyan');
+      
+      fs.writeFileSync(outputPath, JSON.stringify(artifact.abi, null, 2));
+      
+      // Verify
+      if (fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        log(`✅ SUCCESSFULLY updated (${stats.size} bytes)`, 'green');
+        
+        // Double-check the content
+        const writtenABI = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+        const writtenFunctions = writtenABI.filter(item => item.type === 'function');
+        
+        if (contractName === 'DGMarketCore') {
+          const writtenPurchaseFunction = writtenFunctions.find(fn => fn.name === 'purchaseGiftCard');
+          if (writtenPurchaseFunction) {
+            log(`🎯 VERIFIED: purchaseGiftCard now has ${writtenPurchaseFunction.inputs?.length || 0} inputs`, 'green');
+          }
+        }
+      }
       
     } catch (error) {
-      log(`❌ ${contractName} validation failed: ${error.message}`, 'red');
-      throw error;
+      log(`❌ Error processing ${contractName}: ${error.message}`, 'red');
     }
   }
-}
-
-/**
- * Main execution function - STREAMLINED
- */
-async function main() {
-  const startTime = Date.now();
   
-  try {
-    log('🚀 DGMarket Frontend ABI Sync - FIXED', 'magenta');
-    log('========================================', 'magenta');
+  // Final verification
+  log('\n✅ FINAL VERIFICATION:', 'magenta');
+  log('=====================', 'magenta');
+  
+  const finalABIPath = path.resolve(`${FRONTEND_DIR}/lib/abis/DGMarketCore.json`);
+  if (fs.existsSync(finalABIPath)) {
+    const finalABI = JSON.parse(fs.readFileSync(finalABIPath, 'utf8'));
+    const finalPurchaseFunction = finalABI.find(fn => fn.type === 'function' && fn.name === 'purchaseGiftCard');
     
-    // Step 1: Validate addresses (no updating needed)
-    log('\n📍 Step 1: Validating deployment...', 'cyan');
-    validateAddresses();
-    
-    // Step 2: Process ABIs (main purpose)
-    log('\n📍 Step 2: Syncing contract ABIs...', 'cyan');
-    for (const [contractName, config] of Object.entries(CONTRACTS)) {
-      log(`\n🔧 Processing ${contractName}...`, 'yellow');
-      
-      const abi = extractABI(config.artifactPath);
-      writeABI(abi, config.abiOutputPath);
+    if (finalPurchaseFunction) {
+      log(`🎉 SUCCESS! purchaseGiftCard now has ${finalPurchaseFunction.inputs?.length || 0} inputs`, 'green');
+      log(`📄 File location: ${finalABIPath}`, 'cyan');
+      log(`🎯 This is where your frontend imports from!`, 'green');
+    } else {
+      log(`❌ purchaseGiftCard not found in final ABI`, 'red');
     }
-    
-    // Step 3: Update constants
-    log('\n📍 Step 3: Checking constants...', 'cyan');
-    updateConstants();
-    
-    // Step 4: Final validation (FIXED)
-    log('\n📍 Step 4: Final validation...', 'cyan');
-    validateABIs();
-    
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    
-    // Success message
-    log('\n🎉 ABI SYNC COMPLETE! 🎉', 'green');
-    log('========================', 'green');
-    log(`⏱️ Completed in ${duration} seconds`, 'green');
-    log('✅ All ABIs synchronized', 'green');
-    log('✅ Contract validation passed', 'green');
-    log('💡 Contract addresses handled via direct import', 'cyan');
-    
-    log('\n🚀 Your frontend is ready to use!', 'magenta');
-    log('💡 Run this script after any contract redeployment', 'yellow');
-    
-    // Show next steps
-    log('\n🔄 Next Steps:', 'cyan');
-    log('  1. Set your admin wallet in .env.local:', 'white');
-    log('     NEXT_PUBLIC_ADMIN_WALLET_ADDRESS=0xYourWalletAddress', 'white');
-    log('  2. Start your frontend: npm run dev', 'white');
-    log('  3. Visit: http://localhost:3000/marketplace', 'white');
-    
-  } catch (error) {
-    log('\n💥 SYNC FAILED! 💥', 'red');
-    log('==================', 'red');
-    log(`❌ Error: ${error.message}`, 'red');
-    log('\n🔧 Please check your deployment artifacts and try again', 'yellow');
-    process.exit(1);
+  } else {
+    log(`❌ Final ABI file not found`, 'red');
   }
+  
+  log('\n🚀 READY TO TEST:', 'magenta');
+  log('================', 'magenta');
+  log('✅ ABI updated in CORRECT location', 'green');
+  log('✅ Frontend should now import correct ABI', 'green');
+  log('🔄 Restart your frontend server and test purchase!', 'yellow');
 }
 
-// Run the script
 if (require.main === module) {
-  main();
+  fixPathAndSync();
 }
 
-module.exports = { main, extractABI };
+module.exports = { fixPathAndSync };

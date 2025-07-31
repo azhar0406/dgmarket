@@ -1,10 +1,11 @@
 // File: /app/marketplace/page.tsx
-// Enhanced dynamic marketplace with real categories and beautiful images
+// Enhanced dynamic marketplace with real categories and purchase functionality
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { formatEther, formatUnits } from "viem";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { formatUnits, parseUnits } from "viem";
+import { toast } from 'sonner';
 import { Navigation } from "@/components/navigation/navigation";
 import { Footer } from "@/components/layout/footer";
 import {
@@ -12,6 +13,14 @@ import {
   useAllCategories,
   useCategoryStatistics,
 } from "@/hooks/use-contracts";
+import { 
+  usePurchaseGiftCard, 
+  useUSDCData, 
+  checkSufficientAllowance, 
+  getPurchaseButtonText 
+} from '@/hooks/use-purchase';
+import { CONTRACT_ADDRESSES,DGMARKET_CORE_ADDRESS } from '@/lib/contract-addresses';
+import DGMarketCoreABI from '@/lib/abis/DGMarketCore.json';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,9 +43,48 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Enhanced Gift Card Component with refined design and real images
-function EnhancedGiftCard({ listing }: { listing: any }) {
+// Enhanced Gift Card Component with Purchase Functionality
+function EnhancedGiftCard({ listing, onPurchaseSuccess }: { 
+  listing: any; 
+  onPurchaseSuccess?: () => void; 
+}) {
   const [imageError, setImageError] = useState(false);
+  
+  // Purchase functionality
+  const { purchaseGiftCard, isLoading, currentStep } = usePurchaseGiftCard();
+  const { address, usdcBalance, currentAllowance } = useUSDCData(
+    CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`
+  );
+
+  // Calculate allowance check
+  const priceInWei = parseUnits(listing.price.toString(), 6);
+  const hasSufficientAllowance = checkSufficientAllowance(currentAllowance, priceInWei);
+
+  const handlePurchase = async () => {
+    if (!address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    // Check USDC balance
+    const balanceInUSDC = usdcBalance ? Number(usdcBalance) / 1e6 : 0;
+    if (balanceInUSDC < listing.price) {
+      toast.error(`Insufficient USDC balance. You have ${balanceInUSDC.toFixed(2)} USDC, need ${listing.price.toFixed(2)} USDC`);
+      return;
+    }
+
+    const result = await purchaseGiftCard(
+      listing.id,
+      listing.price,
+      DGMARKET_CORE_ADDRESS as `0x${string}`,
+      DGMarketCoreABI, // Use .abi property from JSON
+      address
+    );
+
+    if (result.success && onPurchaseSuccess) {
+      onPurchaseSuccess();
+    }
+  };
 
   const getCategoryColor = (category: string) => {
     const colors = {
@@ -52,7 +100,6 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
     );
   };
 
-  // Category-specific gradients for image fallbacks
   const getCategoryGradient = (category: string) => {
     const gradients = {
       "Food & Dining": "from-orange-100 to-red-100",
@@ -67,8 +114,19 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
     );
   };
 
+  const buttonText = getPurchaseButtonText(
+    !!address,
+    isLoading,
+    currentStep,
+    listing.isActive,
+    hasSufficientAllowance,
+    listing.price
+  );
+
+  const isButtonDisabled = !listing.isActive || isLoading || !address;
+
   return (
-    <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border-border/50 bg-card">
+    <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border-border/50 bg-card h-full flex flex-col">
       <div className="relative overflow-hidden">
         {/* Gift Card Image with real IPFS images */}
         <div className="aspect-[3/2] overflow-hidden rounded-t-lg bg-gradient-to-br from-muted/50 to-muted/80 relative">
@@ -155,20 +213,20 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
           </Badge>
         </div>
 
-        {/* Title and Description */}
-        {/* Title with consistent height */}
-<div className="h-14 mb-2 flex items-start">
-  <h3 className="text-lg font-semibold text-foreground line-clamp-2...">
-    {listing.title}
-  </h3>
-</div>
+        {/* Title and Description - FIXED HEIGHT */}
+        <div className="mb-4 flex-1">
+          <div className="h-14 mb-2 flex items-start">
+            <h3 className="text-lg font-semibold text-foreground line-clamp-2 group-hover:text-primary/80 transition-colors leading-tight">
+              {listing.title}
+            </h3>
+          </div>
+          <div className="h-10 flex items-start">
+            <p className="text-muted-foreground line-clamp-2 text-sm leading-relaxed">
+              {listing.description}
+            </p>
+          </div>
+        </div>
 
-{/* Description with consistent height */}
-<div className="h-10 flex items-start">
-  <p className="text-muted-foreground line-clamp-2...">
-    {listing.description}
-  </p>
-</div>
         {/* Contract Details */}
         <div className="mb-5 p-3 bg-muted/30 rounded-md text-xs space-y-1.5 border border-border/30">
           <div className="flex justify-between items-center">
@@ -185,31 +243,46 @@ function EnhancedGiftCard({ listing }: { listing: any }) {
           </div>
         </div>
 
-        {/* Purchase Button */}
-        <Button
-          className={`w-full h-11 font-medium transition-all duration-200 ${
-            listing.isActive
-              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md"
-              : "bg-muted text-muted-foreground cursor-not-allowed"
-          }`}
-          disabled={!listing.isActive}
-        >
-          {!listing.isActive ? (
-            "Not Available"
-          ) : (
-            <>
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Buy for ${listing.price.toFixed(2)} USDC
-            </>
-          )}
-        </Button>
+        {/* Bottom Section */}
+        <div className="mt-auto">
+          {/* Purchase Button with Purchase Functionality */}
+          <Button
+            className={`w-full h-11 font-medium transition-all duration-200 mb-3 ${
+              listing.isActive && !isLoading
+                ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
+            } ${currentStep === 'success' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+            disabled={isButtonDisabled}
+            onClick={handlePurchase}
+          >
+            {isLoading && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            {buttonText}
+          </Button>
 
-        <div className="text-center mt-3">
-          <p className="text-xs text-muted-foreground/80">
-            {listing.isRevealed
-              ? "Details visible after purchase"
-              : "Gift card details hidden until revealed"}
-          </p>
+          {/* USDC Balance Display */}
+          {address && usdcBalance && (
+            <div className="text-center mb-2">
+              <p className="text-xs text-muted-foreground">
+                Your USDC balance: ${(Number(usdcBalance) / 1e6).toFixed(2)}
+              </p>
+              {currentAllowance && (
+                <p className="text-xs text-muted-foreground">
+                  Allowance: ${(Number(currentAllowance) / 1e6).toFixed(2)} USDC
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground/80">
+              {listing.isRevealed
+                ? "Details visible after purchase"
+                : "Gift card details hidden until revealed"}
+            </p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -223,12 +296,14 @@ export default function MarketplacePage() {
   const [sortBy, setSortBy] = useState<
     "price-asc" | "price-desc" | "newest" | "oldest"
   >("newest");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Get live contract data
   const {
     data: listings,
     isLoading: listingsLoading,
     error: listingsError,
+    refetch: refetchListings,
   } = useActiveListings();
   const {
     data: categoriesData,
@@ -241,6 +316,22 @@ export default function MarketplacePage() {
     setIsClient(true);
   }, []);
 
+  // Handle purchase success - refresh marketplace data
+  const handlePurchaseSuccess = useCallback(() => {
+    console.log('Purchase successful! Refreshing marketplace...');
+    
+    // Force refresh of marketplace data
+    if (refetchListings) {
+      refetchListings();
+    }
+    
+    // Alternative: Force component refresh
+    setRefreshTrigger(prev => prev + 1);
+    
+    // Show success message
+    toast.success('🎉 Purchase successful! Marketplace updated.');
+  }, [refetchListings]);
+
   // Transform contract data to marketplace format
   const transformedListings = useMemo(() => {
     if (!listings) return [];
@@ -248,7 +339,7 @@ export default function MarketplacePage() {
     return listings.map((listing) => ({
       id: listing.cardId.toString(),
       title: listing.description,
-      price: parseFloat(formatUnits(listing.publicPrice, 6)),
+      price: parseFloat(formatUnits(listing.publicPrice, 6)), // Fixed: Use formatUnits for USDC
       category: listing.category,
       image: listing.imageUrl || null,
       seller: listing.owner,
@@ -261,7 +352,7 @@ export default function MarketplacePage() {
       originalCardId: listing.cardId,
       originalPrice: listing.publicPrice,
     }));
-  }, [listings]);
+  }, [listings, refreshTrigger]); // Added refreshTrigger to dependencies
 
   // Get category counts from transformed listings (real-time counts)
   const categoryInventories = useMemo(() => {
@@ -529,13 +620,16 @@ export default function MarketplacePage() {
 
             {/* Gift Cards Grid */}
             {filteredAndSortedListings.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
-              {filteredAndSortedListings.map((listing) => (
-                <div key={listing.id} className="h-full">
-                  <EnhancedGiftCard listing={listing} />
-                </div>
-              ))}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredAndSortedListings.map((listing) => (
+                  <div key={listing.id} className="h-full">
+                    <EnhancedGiftCard 
+                      listing={listing} 
+                      onPurchaseSuccess={handlePurchaseSuccess}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="text-center py-16">
                 <div className="max-w-md mx-auto">
@@ -573,7 +667,7 @@ export default function MarketplacePage() {
                   <div className="flex justify-between">
                     <span>Contract Address:</span>
                     <code className="text-foreground font-mono bg-background/50 px-2 py-1 rounded text-xs">
-                      0x8b15...E185
+                      {CONTRACT_ADDRESSES.DGMARKET_CORE.slice(0, 6)}...{CONTRACT_ADDRESSES.DGMARKET_CORE.slice(-4)}
                     </code>
                   </div>
                   <div className="flex justify-between">
@@ -616,8 +710,7 @@ export default function MarketplacePage() {
                   <div className="flex flex-wrap gap-2">
                     {categoriesData.map((categoryName, index) => (
                       <Badge key={index} variant="outline" className="text-xs">
-                        {categoryName} ({categoryInventories[categoryName] || 0}
-                        )
+                        {categoryName} ({categoryInventories[categoryName] || 0})
                       </Badge>
                     ))}
                   </div>
