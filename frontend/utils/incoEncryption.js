@@ -1,315 +1,277 @@
-import { Lightning } from '@inco/js/lite';
-import { getAddress } from 'viem';
+// incoEncryption.js - FIXED to match working test pattern exactly
 
-/**
- * Get the Inco Lightning configuration
- * @returns {Object} Lightning configuration
- */
-export const getIncoConfig = () => {
-  // Use Base Sepolia for our implementation
-  return new Lightning({
-    chainId: 84532, // Base Sepolia chainId
-    network: 'testnet'
-  });
+// ✅ CORRECT IMPORTS - Same as working test
+import { getViemChain, supportedChains } from '@inco/js';
+import { Lightning } from '@inco/js/lite';
+
+// =============================================================================
+// GLOBAL ZAP INSTANCE - Initialize once like in working test
+// =============================================================================
+let zapInstance = null;
+
+const initializeZap = () => {
+  if (!zapInstance) {
+    try {
+      const chainId = supportedChains.baseSepolia;
+      zapInstance = Lightning.latest('testnet', chainId);
+      console.log('✅ Zap initialized successfully');
+      console.log('Chain ID:', chainId);
+    } catch (error) {
+      console.error('❌ Failed to initialize Zap:', error);
+      throw error;
+    }
+  }
+  return zapInstance;
 };
 
-/**
- * Encrypt a string value for the gift card contract
- * @param {string} value - String value to encrypt (like gift card code)
- * @param {string} address - User's wallet address
- * @param {string} contractAddress - Gift card contract address
- * @returns {Promise<string>} - Encrypted value as a hex string
- */
-export async function encryptStringValue({
-  value,
-  address,
-  contractAddress,
-}) {
-  try {
-    console.log(`🔒 Encrypting string: "${value}"`);
-    
-    // Convert string to BigInt (same as your enhanced method)
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(value);
-    
-    let bigIntValue = 0n;
-    for (let i = 0; i < bytes.length; i++) {
-      bigIntValue = (bigIntValue << 8n) + BigInt(bytes[i]);
-    }
-    
-    console.log(`   📝 String as BigInt: ${bigIntValue.toString()}`);
-    
-    const checksummedAddress = getAddress(contractAddress);
-    const incoConfig = getIncoConfig();
-    
-    const encryptedData = await incoConfig.encrypt(bigIntValue, {
-      accountAddress: address,
-      dappAddress: checksummedAddress,
-    });
-    
-    console.log('✅ Successfully encrypted string value');
-    return encryptedData;
-  } catch (error) {
-    console.error('❌ String encryption error:', error);
-    throw new Error(`Failed to encrypt string: ${error.message}`);
-  }
-}
+// =============================================================================
+// GET INCO CONFIG - Simple getter for zap instance
+// =============================================================================
+export const getIncoConfig = () => {
+  return initializeZap();
+};
 
-/**
- * Encrypt a numeric value (like PIN) for the gift card contract
- * @param {number|string} value - Numeric value to encrypt (like PIN)
- * @param {string} address - User's wallet address
- * @param {string} contractAddress - Gift card contract address
- * @returns {Promise<string>} - Encrypted value as a hex string
- */
-export async function encryptNumericValue({
-  value,
-  address,
-  contractAddress,
-}) {
-  try {
-    console.log(`🔒 Encrypting PIN: "${value}"`);
-    
-    // Convert directly to BigInt for numeric values
-    const valueBigInt = BigInt(value);
-    console.log(`   📝 PIN as BigInt: ${valueBigInt.toString()}`);
-    
-    const checksummedAddress = getAddress(contractAddress);
-    const incoConfig = getIncoConfig();
-    
-    const encryptedData = await incoConfig.encrypt(valueBigInt, {
-      accountAddress: address,
-      dappAddress: checksummedAddress,
-    });
-    
-    console.log('✅ Successfully encrypted numeric value');
-    return encryptedData;
-  } catch (error) {
-    console.error('❌ Numeric encryption error:', error);
-    throw new Error(`Failed to encrypt numeric value: ${error.message}`);
-  }
-}
-
-/**
- * Helper function to create a wallet client from an ethers provider
- * @param {Object} provider - Ethers provider
- * @returns {Promise<Object>} - Viem compatible wallet client
- */
-export async function createWalletClientFromEthers(provider) {
-  const signer = await provider.getSigner();
-  const address = await signer.getAddress();
-  
-  return {
-    account: { address },
-    async signMessage({ message }) {
-      return signer.signMessage(message);
-    }
-  };
-}
-
-/**
- * Convert BigInt back to original string (reverse of encryption process)
- * @param {bigint} bigIntValue - BigInt value to convert
- * @returns {string} - Original string
- */
-function bigIntToString(bigIntValue) {
-  if (bigIntValue === 0n) {
-    return "";
-  }
-  
-  // Extract bytes from BigInt (reverse of encryption process)
-  const bytes = [];
-  let remaining = bigIntValue;
-  
-  while (remaining > 0n) {
-    const byte = Number(remaining & 0xFFn);
-    bytes.unshift(byte); // Add to front to maintain correct order
-    remaining = remaining >> 8n;
-  }
-  
-  // Convert bytes back to string
-  const decoder = new TextDecoder();
-  return decoder.decode(new Uint8Array(bytes));
-}
-
-/**
- * Decrypt a single encrypted handle
- * @param {Object} walletClient - Viem wallet client
- * @param {string} handle - Encrypted handle from the contract
- * @param {string} valueType - Type of value ('code' or 'pin')
- * @returns {Promise<string>} - Decrypted value as string
- */
-export async function decryptValue({
-  walletClient,
-  handle,
-  valueType = 'code'
-}) {
-  if (!walletClient || !handle) {
-    throw new Error('Missing required parameters for decryption');
-  }
-  
+// =============================================================================
+// DECRYPT VALUE - Following EXACT official docs pattern
+// =============================================================================
+export const decryptValue = async ({ walletClient, handle, valueType }) => {
   try {
     console.log(`🔓 Decrypting ${valueType} from handle: ${handle.substring(0, 20)}...`);
     
-    const incoConfig = getIncoConfig();
-    const reencryptor = await incoConfig.getReencryptor(walletClient);
+    // Get the zap instance
+    const zap = initializeZap();
+    console.log('📡 Got zap instance:', !!zap);
     
-    // Add retry logic for reencryption
-    const backoffConfig = {
-      maxRetries: 100,
-      baseDelayInMs: 1000,
-      backoffFactor: 1.5,
-    };
+    // Create reencryptor - EXACT pattern from official docs
+    console.log('👤 Creating reencryptor with walletClient:', {
+      account: walletClient.account?.address,
+      chain: walletClient.chain?.id
+    });
     
-    const decryptedResult = await reencryptor(
-      { handle: handle },
-      backoffConfig
-    );
+    const reencryptor = await zap.getReencryptor(walletClient);
+    console.log('✅ Reencryptor created successfully');
     
-    if (!decryptedResult) {
-      throw new Error('Failed to decrypt');
+    // Decrypt using EXACT official pattern
+    console.log('🔓 Calling reencryptor with handle...');
+    const resultPlaintext = await reencryptor({ handle: handle });
+    
+    console.log('✅ Raw decryption result:', resultPlaintext);
+    console.log('🔢 Decrypted value (BigInt):', resultPlaintext.value);
+    
+    // Convert based on value type - same as working test
+    if (valueType === 'code') {
+      const decryptedCode = convertBigIntToString(resultPlaintext.value);
+      console.log(`✅ Decrypted ${valueType}:`, decryptedCode);
+      return decryptedCode;
+    } else if (valueType === 'pin') {
+      const decryptedPin = convertBigIntToNumber(resultPlaintext.value);
+      console.log(`✅ Decrypted ${valueType}:`, decryptedPin);
+      return decryptedPin;
     }
     
-    const decryptedBigInt = decryptedResult.value;
-    console.log(`   📝 Decrypted BigInt: ${decryptedBigInt.toString()}`);
-    
-    let finalValue;
-    if (valueType === 'pin') {
-      // For PINs, directly convert BigInt to string
-      finalValue = decryptedBigInt.toString();
-      console.log(`   ✅ Decrypted PIN: "${finalValue}"`);
-    } else {
-      // For codes, convert BigInt back to original string
-      finalValue = bigIntToString(decryptedBigInt);
-      console.log(`   ✅ Decrypted code: "${finalValue}"`);
-    }
-    
-    return finalValue;
+    // Default: return as string
+    const result = resultPlaintext.value.toString();
+    console.log(`✅ Decrypted ${valueType} (default):`, result);
+    return result;
     
   } catch (error) {
     console.error(`❌ Decryption error for ${valueType}:`, error);
     throw new Error(`Failed to decrypt ${valueType}: ${error.message}`);
   }
-}
+};
 
-/**
- * Decrypt BOTH gift card code and PIN from contract result
- * @param {Object} provider - Ethereum provider (ethers v5)
- * @param {Object} contractResult - Result from revealGiftCard contract call
- * @returns {Promise<{code: string, pin: string}>} - Decrypted gift card data
- */
-export async function decryptGiftCardData(provider, contractResult) {
+// =============================================================================
+// CONVERT BIGINT TO STRING - Exact same as working test
+// =============================================================================
+export const convertBigIntToString = (bigIntValue) => {
   try {
-    console.log('🔐 Starting full gift card decryption...');
-    console.log('📊 Contract result:', contractResult);
+    const codeBytes = [];
+    let remaining = bigIntValue;
     
-    // Create a wallet client from ethers provider
-    const walletClient = await createWalletClientFromEthers(provider);
-    
-    // Extract both encrypted handles from contract result
-    // The contract returns { encryptedCode, encryptedPin } or [encryptedCode, encryptedPin]
-    let encryptedCodeHandle, encryptedPinHandle;
-    
-    if (Array.isArray(contractResult)) {
-      // If it's an array: [encryptedCode, encryptedPin]
-      encryptedCodeHandle = contractResult[0];
-      encryptedPinHandle = contractResult[1];
-    } else if (contractResult.encryptedCode && contractResult.encryptedPin) {
-      // If it's an object: { encryptedCode, encryptedPin }
-      encryptedCodeHandle = contractResult.encryptedCode;
-      encryptedPinHandle = contractResult.encryptedPin;
-    } else {
-      throw new Error('Invalid contract result format');
+    while (remaining > 0n) {
+      codeBytes.unshift(Number(remaining & 0xFFn));
+      remaining = remaining >> 8n;
     }
     
-    console.log('🔑 Encrypted handles:');
-    console.log('   Code handle:', encryptedCodeHandle);
-    console.log('   PIN handle:', encryptedPinHandle);
+    const decryptedString = new TextDecoder().decode(new Uint8Array(codeBytes));
+    console.log('✅ BigInt to string conversion:', decryptedString);
     
-    if (!encryptedCodeHandle || !encryptedPinHandle) {
-      throw new Error('Missing encrypted handles from contract result');
-    }
-    
-    console.log('🔓 Starting Inco FHE decryption for both values...');
-    
-    // Decrypt both values in parallel
-    const [decryptedCode, decryptedPin] = await Promise.all([
-      decryptValue({
-        walletClient,
-        handle: encryptedCodeHandle,
-        valueType: 'code'
-      }),
-      decryptValue({
-        walletClient,
-        handle: encryptedPinHandle,
-        valueType: 'pin'
-      })
-    ]);
-    
-    console.log('✅ Successfully decrypted both gift card values');
-    console.log(`   Code: "${decryptedCode}"`);
-    console.log(`   PIN: "${decryptedPin}"`);
-    
-    return {
-      code: decryptedCode,
-      pin: decryptedPin
-    };
-    
+    return decryptedString;
   } catch (error) {
-    console.error('❌ Failed to decrypt gift card data:', error);
+    console.error('❌ BigInt to string conversion failed:', error);
     throw error;
   }
-}
+};
 
-/**
- * LEGACY: Decrypt a single gift card value (for backward compatibility)
- * @param {Object} provider - Ethereum provider (ethers v5)
- * @param {Object} contract - DGMarketCore contract instance
- * @param {number} cardId - ID of the gift card to decrypt
- * @returns {Promise<bigint>} - Decrypted gift card value
- */
-export async function decryptGiftCardValue(provider, contract, cardId) {
+// =============================================================================
+// CONVERT BIGINT TO NUMBER STRING - For PINs
+// =============================================================================
+export const convertBigIntToNumber = (bigIntValue) => {
   try {
-    console.log('⚠️ Using legacy single-value decryption method');
-    console.log('🔐 Starting decryption for card:', cardId);
+    const numberString = bigIntValue.toString();
+    console.log('✅ BigInt to number conversion:', numberString);
     
-    // Get the user's address
-    const signer = await provider.getSigner();
-    const userAddress = await signer.getAddress();
-    console.log('👤 User address:', userAddress);
+    return numberString;
+  } catch (error) {
+    console.error('❌ BigInt to number conversion failed:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
+// DIRECT DECRYPTION - Following working test pattern exactly
+// =============================================================================
+export const decryptHandleDirect = async (handle, walletClient) => {
+  try {
+    console.log('🔓 Direct decryption starting...');
+    console.log('Handle:', handle);
+    console.log('WalletClient account:', walletClient.account?.address);
     
-    // Create a wallet client from ethers provider
-    const walletClient = await createWalletClientFromEthers(provider);
+    // Initialize zap exactly like working test
+    const zap = initializeZap();
     
-    console.log('📡 Calling revealGiftCard on DGMarketCore...');
+    // Get reencryptor exactly like working test and official docs
+    const reencryptor = await zap.getReencryptor(walletClient);
     
-    // Call the revealGiftCard function which returns both encrypted handles
-    const revealResult = await contract.revealGiftCard(cardId);
-    console.log('🔑 Got encrypted handles from contract:', revealResult);
+    // Decrypt exactly like official docs pattern
+    const result = await reencryptor({ handle: handle });
     
-    // Get the first value (code) for backward compatibility
-    const encryptedCodeHandle = revealResult.encryptedCode || revealResult[0];
+    console.log('✅ Direct decryption successful!');
+    console.log('Raw result:', result);
+    console.log('Value:', result.value);
     
-    if (!encryptedCodeHandle) {
-      throw new Error('No encrypted code handle returned from contract');
-    }
+    return result;
+  } catch (error) {
+    console.error('❌ Direct decryption failed:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
+// TEST WITH KNOWN CARD 44 DATA - For verification
+// =============================================================================
+export const testDecryptionWithCard44 = async (walletClient) => {
+  try {
+    console.log('🧪 Testing decryption with Card 44 known data...');
     
-    console.log('🔓 Starting Inco FHE decryption...');
+    // Known handles from working test
+    const encryptedCodeHandle = "0x4a0f92bedd955476dfd4b14eb85f29fcee5c80f6146889d5ac03ced236000800";
+    const encryptedPinHandle = "0x16abf39d0e5427e86027ae4119c6962d6ac511af848129f2ec2b605bf7000800";
     
-    // Decrypt using the new method
-    const decryptedCode = await decryptValue({
+    // Expected values
+    const expectedCode = "FINAL-SUCCESS-TEST-2025";
+    const expectedPin = "8888";
+    
+    // Test decryption
+    const codeResult = await decryptValue({
       walletClient,
       handle: encryptedCodeHandle,
       valueType: 'code'
     });
     
-    console.log('✅ Successfully decrypted gift card value (legacy mode)');
+    const pinResult = await decryptValue({
+      walletClient,
+      handle: encryptedPinHandle,
+      valueType: 'pin'
+    });
     
-    // Return as BigInt for backward compatibility
-    return BigInt(decryptedCode.charCodeAt(0)); // Just return something for legacy compatibility
+    // Verify results
+    const codeMatch = codeResult === expectedCode;
+    const pinMatch = pinResult === expectedPin;
+    
+    console.log('🧪 Test results:');
+    console.log(`Code: "${codeResult}" (expected: "${expectedCode}") ${codeMatch ? '✅' : '❌'}`);
+    console.log(`PIN: "${pinResult}" (expected: "${expectedPin}") ${pinMatch ? '✅' : '❌'}`);
+    
+    return {
+      success: codeMatch && pinMatch,
+      codeResult,
+      pinResult,
+      codeMatch,
+      pinMatch
+    };
     
   } catch (error) {
-    console.error('❌ Failed to decrypt gift card value:', error);
+    console.error('❌ Card 44 test failed:', error);
     throw error;
   }
-}
+};
+
+// =============================================================================
+// COMPLETE GIFT CARD DECRYPTION
+// =============================================================================
+export const decryptGiftCard = async (codeHandle, pinHandle, walletClient) => {
+  try {
+    console.log('🎁 Starting complete gift card decryption...');
+    console.log('Code handle:', codeHandle);
+    console.log('PIN handle:', pinHandle);
+    
+    // Decrypt both handles using the working pattern
+    const [decryptedCode, decryptedPin] = await Promise.all([
+      decryptValue({
+        walletClient,
+        handle: codeHandle,
+        valueType: 'code'
+      }),
+      decryptValue({
+        walletClient,
+        handle: pinHandle,
+        valueType: 'pin'
+      })
+    ]);
+    
+    const giftCard = {
+      code: decryptedCode,
+      pin: decryptedPin
+    };
+    
+    console.log('🎉 Complete gift card decryption successful!');
+    console.log('Gift card:', giftCard);
+    
+    return giftCard;
+  } catch (error) {
+    console.error('❌ Complete gift card decryption failed:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
+// EXPORT ALL FUNCTIONS
+// =============================================================================
+export {
+  getViemChain,
+  supportedChains,
+  Lightning
+};
+
+// =============================================================================
+// USAGE EXAMPLE - Matching official docs exactly:
+// =============================================================================
+/*
+OFFICIAL DOCS PATTERN:
+```
+import { Hex } from "viem";
+
+// Request a re-encryption of the result ciphertext
+const resultHandle = "0x..." as Hex; // Retrieve the handle from the contract
+const reencryptor = await zap.getReencryptor(walletClient); // Use same walletClient
+const resultPlaintext = await reencryptor({ handle: resultHandle });
+console.log(resultPlaintext.value); // The decrypted value
+```
+
+OUR IMPLEMENTATION:
+```
+// 1. Basic decryption (matches official docs)
+const result = await decryptValue({
+  walletClient,
+  handle: encryptedHandle,
+  valueType: 'code'
+});
+
+// 2. Complete gift card
+const giftCard = await decryptGiftCard(codeHandle, pinHandle, walletClient);
+
+// 3. Test with Card 44
+const test = await testDecryptionWithCard44(walletClient);
+```
+*/

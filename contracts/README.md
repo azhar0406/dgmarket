@@ -95,7 +95,7 @@ node scripts/sync-frontend-abis.js
 ### **9. Start Frontend**
 
 ```sh
-cd .. && pnpm run dev
+cd .. && cd frontend && pnpm run dev
 ```
 
 ## **DGMarket Smart Contract System**

@@ -46,7 +46,7 @@ export function useActiveListings() {
   const { data, isLoading, error, refetch } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: DGMarketCoreABI,
-    functionName: 'getAllGiftCards',
+    functionName: 'getAvailableGiftCards',
   });
 
   const processedData = useMemo(() => {

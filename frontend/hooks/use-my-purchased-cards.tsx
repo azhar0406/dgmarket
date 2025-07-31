@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
-import { useReadContract, useAccount, useWriteContract } from 'wagmi';
+import { useReadContract, useAccount, useWriteContract, useWalletClient, usePublicClient } from 'wagmi';
 import { ethers } from 'ethers';
+import { createPublicClient, http } from 'viem';
+import { baseSepolia } from 'viem/chains';
 import DGMarketCoreContract from '../../contracts/artifacts/contracts/DGMarketCore.sol/DGMarketCore.json';
 import { CONTRACT_ADDRESSES } from '@/lib/contract-addresses';
-import { decryptGiftCardData } from '@/utils/incoEncryption';
+import { getIncoConfig } from '@/utils/incoEncryption';
 
 const DGMarketCoreABI = DGMarketCoreContract.abi;
+
+// Create fallback public client for when wagmi's usePublicClient returns undefined
+const fallbackPublicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http('https://sepolia.base.org'), // Base Sepolia RPC
+});
 
 export interface PurchasedCard {
   id: string;
@@ -138,206 +146,208 @@ export function useMyPurchasedCards(userAddress?: string) {
     refetch
   };
 }
-// Enhanced reveal function with proper Inco FHE integration
-// This can replace the current revealCard function when you're ready for full FHE
 
-// Updated hook for revealing gift cards with proper Inco FHE decryption
+// Fixed hook that handles both fresh reveals and already revealed cards
 export function useRevealGiftCardWithFHE() {
-  const [isRevealing, setIsRevealing] = useState(false);
+  const [revealingCards, setRevealingCards] = useState<{[key: string]: boolean}>({});
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [revealedCards, setRevealedCards] = useState<{[key: string]: {code: string, pin: string}}>({});
+  
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
+  const wagmiPublicClient = usePublicClient();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const revealCard = async (cardId: string) => {
-    if (!isMounted || !address) return false;
+    if (!isMounted || !address || !walletClient) return false;
 
-    setIsRevealing(true);
+    setRevealingCards(prev => ({ ...prev, [cardId]: true }));
     setError(null);
 
     try {
-      console.log('🎯 Starting FHE reveal process for card:', cardId);
+      console.log('🎯 Starting reveal process for card:', cardId);
 
-      // Step 1: Call revealGiftCard to get encrypted handles
-      console.log('📡 Calling revealGiftCard on contract...');
+      // Fix: Use fallback client if wagmi client is undefined
+      const publicClient = wagmiPublicClient || fallbackPublicClient;
+
+      // Step 1: Check if card is already revealed
+      console.log('🔍 Checking if card is already revealed...');
       
-      const result = await writeContractAsync({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'revealGiftCard',
-        args: [BigInt(cardId)]
-      });
+      try {
+        const isRevealed = await publicClient.readContract({
+          address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+          abi: DGMarketCoreABI,
+          functionName: 'isGiftCardRevealed',
+          args: [BigInt(cardId)]
+        });
 
-      console.log('✅ Reveal transaction result:', result);
-      
-      // Step 2: Wait for transaction confirmation
-      await new Promise(resolve => setTimeout(resolve, 8000));
+        console.log(`📋 Card ${cardId} revealed status:`, isRevealed);
 
-      // Step 3: Get the actual encrypted handles from the transaction
-      if (window.ethereum) {
-        try {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const receipt = await provider.getTransactionReceipt(result);
+        let encryptedHandles;
+
+        if (isRevealed) {
+          // Card is already revealed - get the existing encrypted handles
+          console.log('✅ Card already revealed, getting existing handles...');
           
-          if (receipt && receipt.logs.length > 0) {
-            console.log('📊 Transaction receipt:', receipt);
-            
-            // Parse the transaction logs to get the actual encrypted handles
-            // For now, we'll use the test data format until we can parse the logs properly
-            
-            // IMPORTANT: Replace these with actual parsing logic
-            // These should come from the transaction logs/events
-            const mockEncryptedHandles = {
-              encryptedCode: "0x4a0f92bedd955476dfd4b14eb85f29fcee5c80f6146889d5ac03ced236000800", // Replace with actual
-              encryptedPin: "0x16abf39d0e5427e86027ae4119c6962d6ac511af848129f2ec2b605bf7000800"   // Replace with actual
-            };
-            
-            console.log('🔐 Using encrypted handles for FHE decryption...');
-            
-            // Step 4: Decrypt using real Inco FHE
-            const decryptedData = await decryptGiftCardData(provider, mockEncryptedHandles);
-            
-            console.log('✅ Successfully decrypted gift card data:', decryptedData);
-            
-            setRevealedCards(prev => ({
-              ...prev,
-              [cardId]: decryptedData
-            }));
-            
-            setIsRevealing(false);
-            return true;
-          }
-        } catch (fheError) {
-          console.warn('⚠️ FHE decryption failed, using fallback:', fheError);
+          encryptedHandles = await publicClient.readContract({
+            address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+            abi: DGMarketCoreABI,
+            functionName: 'getRevealedGiftCard',
+            args: [BigInt(cardId)]
+          });
+
+          console.log('🔑 Retrieved existing encrypted handles:', encryptedHandles);
           
-          // Fallback to simulated data if FHE fails
-          const fallbackData = {
-            code: `MC-${cardId}-${Date.now().toString(36).toUpperCase().slice(-8)}`,
-            pin: Math.floor(1000 + Math.random() * 9000).toString()
-          };
+        } else {
+          // Card not revealed yet - call reveal transaction first
+          console.log('📡 Card not revealed, calling revealGiftCard transaction...');
+          
+          const txHash = await writeContractAsync({
+            address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+            abi: DGMarketCoreABI,
+            functionName: 'revealGiftCard',
+            args: [BigInt(cardId)]
+          });
+
+          console.log('✅ Reveal transaction submitted:', txHash);
+          
+          // Wait for transaction confirmation
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          // Now get the encrypted handles
+          console.log('🔍 Getting encrypted handles after reveal...');
+          
+          encryptedHandles = await publicClient.readContract({
+            address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+            abi: DGMarketCoreABI,
+            functionName: 'getRevealedGiftCard',
+            args: [BigInt(cardId)]
+          });
+
+          console.log('🔑 Retrieved new encrypted handles:', encryptedHandles);
+        }
+
+        // Step 2: Process the encrypted handles
+        if (encryptedHandles && Array.isArray(encryptedHandles) && encryptedHandles.length >= 2) {
+          const [encryptedCode, encryptedPin] = encryptedHandles;
+          
+          console.log('🔑 Processing encrypted handles:');
+          console.log('   Code handle:', encryptedCode);
+          console.log('   PIN handle:', encryptedPin);
+          
+          // Step 3: Decrypt with Inco FHE
+          console.log('🔓 Starting FHE decryption...');
+          
+          const decryptedData = await decryptWithIncoFHE(walletClient, {
+            encryptedCode,
+            encryptedPin
+          });
+          
+          console.log('✅ Successfully decrypted:', decryptedData);
+          console.log(`   Code: "${decryptedData.code}"`);
+          console.log(`   PIN: "${decryptedData.pin}"`);
           
           setRevealedCards(prev => ({
             ...prev,
-            [cardId]: fallbackData
+            [cardId]: decryptedData
           }));
           
-          setIsRevealing(false);
+          setRevealingCards(prev => ({ ...prev, [cardId]: false }));
           return true;
+        } else {
+          throw new Error('Invalid encrypted handles received from contract');
         }
+
+      } catch (contractError: any) {
+        console.error('❌ Contract interaction failed:', contractError);
+        throw new Error(`Contract call failed: ${contractError.message}`);
       }
 
-      // Final fallback: Transaction was successful, generate realistic data
-      const fallbackData = {
-        code: `MC-${cardId}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-        pin: Math.floor(1000 + Math.random() * 9000).toString()
-      };
-      
-      setRevealedCards(prev => ({
-        ...prev,
-        [cardId]: fallbackData
-      }));
-      
-      console.log('✅ Gift card revealed (fallback method)');
-      setIsRevealing(false);
-      return true;
-
     } catch (err: any) {
-      console.error('❌ Error in reveal process:', err);
+      console.error('❌ Reveal process failed:', err);
       
-      // Check if it's a user rejection
       if (err.code === 4001 || err.message?.includes('User rejected')) {
         setError('Transaction was cancelled by user');
       } else if (err.message?.includes('insufficient funds')) {
         setError('Insufficient funds for transaction');
       } else {
-        setError(`Reveal failed: ${err.message || 'Unknown error'}`);
+        setError(`Reveal failed: ${err?.message || 'Unknown error'}`);
       }
       
-      setIsRevealing(false);
+      setRevealingCards(prev => ({ ...prev, [cardId]: false }));
       return false;
     }
   };
 
-  // Function with REAL Inco FHE integration (when transaction parsing is ready)
-  const revealCardWithRealFHE = async (cardId: string) => {
-    if (!isMounted || !address) return false;
-
-    setIsRevealing(true);
-    setError(null);
-
-    try {
-      console.log('🎯 Starting REAL FHE reveal for card:', cardId);
-
-      // Step 1: Call contract and get transaction result
-      const txResult = await writeContractAsync({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'revealGiftCard',
-        args: [BigInt(cardId)]
-      });
-
-      console.log('📡 Transaction submitted:', txResult);
-      
-      // Step 2: Wait for transaction to be mined
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      // Step 3: Get encrypted handles from transaction events/logs
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const receipt = await provider.getTransactionReceipt(txResult);
-      
-      // TODO: Parse the actual encrypted handles from the transaction logs
-      // This is where you'd extract the real handles from the contract events
-      const encryptedHandles = parseEncryptedHandlesFromLogs(receipt.logs);
-      
-      // Step 4: Use Inco FHE to decrypt both values
-      const decryptedData = await decryptGiftCardData(provider, encryptedHandles);
-      
-      console.log('✅ Successfully decrypted with REAL FHE:', decryptedData);
-      
-      setRevealedCards(prev => ({
-        ...prev,
-        [cardId]: decryptedData
-      }));
-      
-      setIsRevealing(false);
-      return true;
-      
-    } catch (error: any) {
-      console.error('❌ Real FHE reveal failed:', error);
-      setError(`FHE reveal failed: ${error?.message || 'Unknown error'}`);
-      setIsRevealing(false);
-      return false;
-    }
-  };
-
-  // Helper function to parse encrypted handles from transaction logs
-  const parseEncryptedHandlesFromLogs = (logs: any[]) => {
-    // TODO: Implement proper log parsing
-    // Look for the event that contains the encrypted handles
-    // This would parse the actual GiftCardRevealed event or similar
-    
-    console.log('📊 Parsing logs for encrypted handles:', logs);
-    
-    // For now, return mock handles - replace this with actual parsing
-    return {
-      encryptedCode: "0x4a0f92bedd955476dfd4b14eb85f29fcee5c80f6146889d5ac03ced236000800",
-      encryptedPin: "0x16abf39d0e5427e86027ae4119c6962d6ac511af848129f2ec2b605bf7000800"
-    };
+  const isRevealingCard = (cardId: string) => {
+    return revealingCards[cardId] || false;
   };
 
   return {
     revealCard,
-    revealCardWithRealFHE,
-    isRevealing,
+    isRevealingCard,
+    isRevealing: Object.values(revealingCards).some(Boolean),
     error,
-    revealedCards // Now returns {code: string, pin: string} objects
+    revealedCards
   };
 }
+
+// Clean decryption function using wagmi wallet
+async function decryptWithIncoFHE(
+  walletClient: any, 
+  handles: { encryptedCode: string; encryptedPin: string }
+) {
+  try {
+    console.log('🔐 Starting Inco FHE decryption...');
+    console.log('🔑 Input handles:', handles);
+    
+    // Get Inco configuration - Fix: Add proper typing
+    const incoConfig = getIncoConfig() as any; // Type assertion to fix getReencryptor error
+    const reencryptor = await incoConfig.getReencryptor(walletClient);
+    
+    // Decrypt both handles
+    console.log('🔓 Decrypting both handles...');
+    const [codeResult, pinResult] = await Promise.all([
+      reencryptor({ handle: handles.encryptedCode }),
+      reencryptor({ handle: handles.encryptedPin })
+    ]);
+    
+    console.log('🔓 Raw decrypted values:');
+    console.log('   Code BigInt:', codeResult.value.toString());
+    console.log('   PIN BigInt:', pinResult.value.toString());
+    
+    // Convert code from BigInt to string
+    const codeBytes = [];
+    let remaining = codeResult.value;
+    while (remaining > BigInt(0)) {
+      codeBytes.unshift(Number(remaining & BigInt(0xFF)));
+      remaining = remaining >> BigInt(8);
+    }
+    const decryptedCode = new TextDecoder().decode(new Uint8Array(codeBytes));
+    
+    // Convert PIN from BigInt to string
+    const decryptedPin = pinResult.value.toString();
+    
+    console.log('✅ Final decrypted values:');
+    console.log(`   Code: "${decryptedCode}"`);
+    console.log(`   PIN: "${decryptedPin}"`);
+    
+    return {
+      code: decryptedCode,
+      pin: decryptedPin
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Inco FHE decryption failed:', error);
+    throw new Error(`Decryption failed: ${error.message}`);
+  }
+}
+
 // Updated hook for revealing gift cards with Inco FHE
 export function useRevealGiftCard() {
   const [isRevealing, setIsRevealing] = useState(false);

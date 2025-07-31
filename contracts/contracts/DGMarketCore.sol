@@ -80,6 +80,23 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
         uint256 createdAt;
     }
 
+    /**
+ * @dev Enhanced struct for gift cards with encrypted data
+ */
+struct GiftCardWithEncryption {
+    uint256 cardId;
+    uint256 publicPrice;
+    address owner;
+    string category;
+    string description; 
+    string imageUrl;
+    bool isActive;
+    bool isPurchased;
+    bool isRevealed;
+    euint256 encryptedCode;  // 0x0 if not revealed
+    euint256 encryptedPin;   // 0x0 if not revealed
+}
+
     // =============================================================================
     // STATE VARIABLES (OPTIMIZED STORAGE)
     // =============================================================================
@@ -199,6 +216,92 @@ contract DGMarketCore is AccessControl, ReentrancyGuard, Pausable {
             });
         }
     }
+
+    // Add these functions to your DGMarketCore.sol contract
+
+// =============================================================================
+// NEW VIEW FUNCTIONS FOR REVEALED CARDS
+// =============================================================================
+
+/**
+ * @dev Get revealed gift card data - FIXED VERSION using struct return
+ * Same function name, but now returns the working struct format
+ */
+function getRevealedGiftCard(uint256 cardId) 
+    external 
+    view 
+    validCard(cardId) 
+    onlyCardOwner(cardId) 
+    returns (GiftCardWithEncryption memory) 
+{
+    GiftCardCore storage core = cardCores[cardId];
+    GiftCardMeta storage meta = cardMetas[cardId];
+    GiftCardStatus storage status = cardStatuses[cardId];
+    
+    // Optional: Keep the validation if you want
+    require(core.isPurchased, "Card not purchased");
+    require(status.isRevealed, "Card not revealed yet");
+    
+    // Use the SAME pattern as getMyGiftCardsWithEncryption (which works!)
+    euint256 code = cardEncryptedCodes[cardId];
+    euint256 pin =  cardEncryptedPins[cardId];
+    
+    return GiftCardWithEncryption({
+        cardId: cardId,
+        publicPrice: core.publicPrice,
+        owner: core.owner,
+        category: meta.category,
+        description: meta.description,
+        imageUrl: meta.imageUrl,
+        isActive: core.isActive,
+        isPurchased: core.isPurchased,
+        isRevealed: status.isRevealed,
+        encryptedCode: code,
+        encryptedPin: pin
+    });
+}
+
+/**
+ * @dev Get user's gift cards with encryption status and handles
+ */
+function getMyGiftCardsWithEncryption() external view returns (GiftCardWithEncryption[] memory) {
+    uint256[] memory cardIds = userGiftCards[msg.sender];
+    GiftCardWithEncryption[] memory result = new GiftCardWithEncryption[](cardIds.length);
+    
+    for (uint256 i = 0; i < cardIds.length; i++) {
+        uint256 cardId = cardIds[i];
+        GiftCardCore storage core = cardCores[cardId];
+        GiftCardMeta storage meta = cardMetas[cardId];
+        GiftCardStatus storage status = cardStatuses[cardId];
+        
+        // Only include encrypted handles if revealed
+        euint256 code = status.isRevealed ? cardEncryptedCodes[cardId] : euint256.wrap(0);
+        euint256 pin = status.isRevealed ? cardEncryptedPins[cardId] : euint256.wrap(0);
+        
+        result[i] = GiftCardWithEncryption({
+            cardId: cardId,
+            publicPrice: core.publicPrice,
+            owner: core.owner,
+            category: meta.category,
+            description: meta.description,
+            imageUrl: meta.imageUrl,
+            isActive: core.isActive,
+            isPurchased: core.isPurchased,
+            isRevealed: status.isRevealed,
+            encryptedCode: code,
+            encryptedPin: pin
+        });
+    }
+    
+    return result;
+}
+
+/**
+ * @dev Check if a gift card is revealed (helper function)
+ */
+function isGiftCardRevealed(uint256 cardId) external view validCard(cardId) returns (bool) {
+    return cardStatuses[cardId].isRevealed;
+}
 
     // =============================================================================
     // CATEGORY MANAGEMENT
