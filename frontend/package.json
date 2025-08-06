@@ -12,6 +12,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@inco/js": "^0.2.15",
     "@next/swc-wasm-nodejs": "13.5.1",
+    "@okx-dex/okx-dex-sdk": "^1.0.16",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-aspect-ratio": "^1.1.0",
@@ -45,9 +46,12 @@
     "@wagmi/connectors": "^4.0.0",
     "@wagmi/core": "^2.0.0",
     "autoprefixer": "10.4.15",
+    "axios": "^1.11.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "crypto": "^1.0.1",
+    "crypto-js": "^4.2.0",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.3.0",
     "encoding": "^0.1.13",
@@ -75,10 +79,12 @@
     "vaul": "^0.9.9",
     "viem": "^2.31.4",
     "wagmi": "^2.0.0",
+    "web3": "^4.16.0",
     "zod": "^3.23.8",
     "zustand": "^4.4.0"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "19.1.8"
   }
 }

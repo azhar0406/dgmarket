@@ -9,6 +9,7 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY_BASE_SEPOLIA || "";
 const PRIVATE_KEY_ANVIL = process.env.PRIVATE_KEY_ANVIL || "";
 const BASE_SEPOLIA_RPC_URL = process.env.BASE_SEPOLIA_RPC_URL || "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
+const BASE_MAINNET_RPC_URL = process.env.BASE_MAINNET_RPC_URL || "";
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -32,6 +33,10 @@ const config: HardhatUserConfig = {
     },
     baseSepolia: {
       url: BASE_SEPOLIA_RPC_URL,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
+    baseMainnet: {
+      url: BASE_MAINNET_RPC_URL,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     }
   },

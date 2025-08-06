@@ -210,7 +210,7 @@ struct GiftCardWithEncryption {
             categories.push(defaultCategories[i]);
             categoryInventory[defaultCategories[i]] = CategoryInventory({
                 count: 0,
-                threshold: 5,
+                threshold: 2,
                 active: true,
                 createdAt: block.timestamp
             });
@@ -259,6 +259,52 @@ function getRevealedGiftCard(uint256 cardId)
         encryptedCode: code,
         encryptedPin: pin
     });
+}
+
+function purchaseGiftCardOnBehalf(address user, uint256 cardId) 
+    external 
+    onlyRole(ADMIN_ROLE)  // ✅ Use your existing role system!
+    validCard(cardId) 
+    notExpired(cardId) 
+    nonReentrant 
+    whenNotPaused 
+{
+    require(user != address(0), "Invalid user");
+    
+    GiftCardCore storage core = cardCores[cardId];
+    GiftCardStatus storage status = cardStatuses[cardId];
+    GiftCardMeta storage meta = cardMetas[cardId];
+    
+    // Validation
+    require(!core.isPurchased, "Card already purchased");
+    require(core.owner != user, "User already owns card");
+    
+    address previousOwner = core.owner;
+    
+    // Remove from previous owner's list
+    if (previousOwner != address(this)) {
+        _removeFromUserCards(previousOwner, cardId);
+    }
+    
+    // Add to user's list
+    userGiftCards[user].push(cardId);
+    
+    // Update state
+    core.owner = user;
+    core.isPurchased = true;
+    status.purchasedAt = block.timestamp;
+    
+    // Set FHE permissions for user
+    e.allow(cardEncryptedCodes[cardId], user);
+    e.allow(cardEncryptedPins[cardId], user);
+    
+    // Update inventory
+    categoryInventory[meta.category].count--;
+    emit InventoryUpdated(meta.category, categoryInventory[meta.category].count);
+    
+    // Events
+    emit GiftCardPurchased(cardId, user, previousOwner, core.publicPrice);
+    emit OwnershipTransferred(cardId, previousOwner, user);
 }
 
 /**

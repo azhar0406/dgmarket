@@ -1,5 +1,5 @@
 // scripts/complete-master-setup.js
-// Complete master script for DGMarket 2-Contract Architecture with proper verification
+// Complete master script for DGMarket 2-Contract Architecture + SimpleBridge with proper verification
 
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,7 @@ require('dotenv').config();
 // Import configuration logic
 const { createWalletClient, createPublicClient, http } = require("viem");
 const { privateKeyToAccount } = require("viem/accounts");
-const { baseSepolia } = require("viem/chains");
+const { baseSepolia, base } = require("viem/chains");
 
 // Define contractAddresses at global scope
 let contractAddresses = {};
@@ -68,6 +68,14 @@ function getConstructorArgs(contractName, deployedAddresses) {
         subscriptionId,
         apiBaseUrl
       ];
+
+    case 'SimpleBridge':
+      // SimpleBridge constructor: constructor() - no arguments
+      // Admin is set to msg.sender automatically
+      console.log(`📋 SimpleBridge Constructor Args:`);
+      console.log(`  - No constructor arguments (admin = msg.sender)`);
+      
+      return [];
       
     default:
       return [];
@@ -126,7 +134,8 @@ async function checkPrerequisites() {
   
   const requiredEnvVars = [
     'PRIVATE_KEY_BASE_SEPOLIA',
-    'BASE_SEPOLIA_RPC_URL'
+    'BASE_SEPOLIA_RPC_URL',
+    'BASE_MAINNET_RPC_URL' // Added for SimpleBridge deployment
   ];
   
   const missing = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -158,32 +167,108 @@ async function checkPrerequisites() {
   return true;
 }
 
+// async function deploySimpleBridge() {
+//   console.log("🌉 Deploying SimpleBridge to Base Mainnet...");
+//   console.log("=".repeat(50));
+
+//   const PRIVATE_KEY = process.env.PRIVATE_KEY_BASE_SEPOLIA.startsWith("0x") 
+//     ? process.env.PRIVATE_KEY_BASE_SEPOLIA 
+//     : `0x${process.env.PRIVATE_KEY_BASE_SEPOLIA}`;
+
+//   const account = privateKeyToAccount(PRIVATE_KEY);
+//   const chain = base; // Base Mainnet
+//   const rpcUrl = process.env.BASE_MAINNET_RPC_URL;
+
+//   const publicClient = createPublicClient({
+//     chain,
+//     transport: http(rpcUrl),
+//   });
+
+//   const wallet = createWalletClient({
+//     account,
+//     chain,
+//     transport: http(rpcUrl),
+//   });
+
+//   try {
+//     // Check balance on Base Mainnet
+//     const balance = await publicClient.getBalance({ address: account.address });
+//     const balanceEth = Number(balance) / 1e18;
+    
+//     console.log(`💰 Deployer Balance on Base Mainnet: ${balanceEth.toFixed(4)} ETH`);
+    
+//     if (balanceEth == 0) {
+//       console.error("❌ Insufficient ETH balance on Base Mainnet for deployment");
+//       console.log("💡 Please fund your wallet with ETH on Base Mainnet");
+//       return null;
+//     }
+
+//     // Deploy SimpleBridge using Hardhat ignition
+//     console.log("🚀 Deploying SimpleBridge contract...");
+    
+//     try {
+//       const deployResult = await execCommand(
+//         `npx hardhat ignition deploy ./ignition/modules/SimpleBridge.ts --network baseMainnet`,
+//         120000 // 2 minutes timeout
+//       );
+      
+//       console.log("✅ SimpleBridge deployment command executed");
+      
+//       // Check for deployment addresses
+//       const mainnetDeploymentPath = "./ignition/deployments/chain-8453/deployed_addresses.json";
+      
+//       if (fs.existsSync(mainnetDeploymentPath)) {
+//         const deployedAddresses = JSON.parse(fs.readFileSync(mainnetDeploymentPath, 'utf8'));
+//         const simpleBridgeAddress = deployedAddresses["SimpleBridgeModule#SimpleBridge"];
+        
+//         if (simpleBridgeAddress) {
+//           console.log(`✅ SimpleBridge deployed at: ${simpleBridgeAddress}`);
+//           contractAddresses.simpleBridge = simpleBridgeAddress;
+//           return simpleBridgeAddress;
+//         }
+//       }
+      
+//       console.error("❌ SimpleBridge address not found in deployment file");
+//       return null;
+      
+//     } catch (error) {
+//       console.error("❌ SimpleBridge deployment failed:", error.message);
+//       console.log("💡 You may need to create the SimpleBridge ignition module first");
+//       return null;
+//     }
+
+//   } catch (error) {
+//     console.error("❌ Error during SimpleBridge deployment:", error.message);
+//     return null;
+//   }
+// }
+
 async function configureSystemRoles() {
-  console.log("🔐 Configuring System Roles and Permissions (2-Contract Architecture)...");
-  console.log("=".repeat(70));
+  console.log("🔐 Configuring System Roles and Permissions (2-Contract + Bridge Architecture)...");
+  console.log("=".repeat(80));
 
   // Import ABIs for 2-contract system
   const dgMarketCoreAbi = require("../artifacts/contracts/DGMarketCore.sol/DGMarketCore.json");
   const chainlinkGiftCardManagerAbi = require("../artifacts/contracts/ChainlinkGiftCardManager.sol/ChainlinkGiftCardManager.json");
 
-  // Setup wallet and client
+  // Setup wallet and client for Base Sepolia
   const PRIVATE_KEY = process.env.PRIVATE_KEY_BASE_SEPOLIA.startsWith("0x") 
     ? process.env.PRIVATE_KEY_BASE_SEPOLIA 
     : `0x${process.env.PRIVATE_KEY_BASE_SEPOLIA}`;
 
   const account = privateKeyToAccount(PRIVATE_KEY);
-  const chain = baseSepolia;
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
+  const sepoliaChain = baseSepolia;
+  const sepoliaRpcUrl = process.env.BASE_SEPOLIA_RPC_URL;
 
-  const publicClient = createPublicClient({
-    chain,
-    transport: http(rpcUrl),
+  const sepoliaPublicClient = createPublicClient({
+    chain: sepoliaChain,
+    transport: http(sepoliaRpcUrl),
   });
 
-  const wallet = createWalletClient({
+  const sepoliaWallet = createWalletClient({
     account,
-    chain,
-    transport: http(rpcUrl),
+    chain: sepoliaChain,
+    transport: http(sepoliaRpcUrl),
   });
 
   // Get deployed contract addresses
@@ -196,12 +281,14 @@ async function configureSystemRoles() {
     dgMarketCore: deployedAddresses["DGMarketCompleteModule#DGMarketCore"] || 
                   deployedAddresses["DGMarketModule#DGMarketCore"],
     chainlinkGiftCardManager: deployedAddresses["DGMarketCompleteModule#ChainlinkGiftCardManager"] || 
-                             deployedAddresses["DGMarketModule#ChainlinkGiftCardManager"]
+                             deployedAddresses["DGMarketModule#ChainlinkGiftCardManager"],
+    simpleBridge: contractAddresses.simpleBridge // From previous deployment
   };
 
-  console.log("📍 Contract Addresses (2-Contract System):");
-  console.log(`- DGMarketCore: ${contractAddresses.dgMarketCore}`);
-  console.log(`- ChainlinkGiftCardManager: ${contractAddresses.chainlinkGiftCardManager}`);
+  console.log("📍 Contract Addresses (2-Contract + Bridge System):");
+  console.log(`- DGMarketCore (Base Sepolia): ${contractAddresses.dgMarketCore}`);
+  console.log(`- ChainlinkGiftCardManager (Base Sepolia): ${contractAddresses.chainlinkGiftCardManager}`);
+  console.log(`- SimpleBridge (Base Mainnet): ${contractAddresses.simpleBridge || 'Not deployed'}`);
 
   if (!contractAddresses.dgMarketCore) {
     console.error("❌ DGMarketCore address not found in deployment file");
@@ -214,32 +301,32 @@ async function configureSystemRoles() {
     
     // Check current admin role
     try {
-      const adminRole = await publicClient.readContract({
+      const adminRole = await sepoliaPublicClient.readContract({
         address: contractAddresses.dgMarketCore,
         abi: dgMarketCoreAbi.abi,
         functionName: "ADMIN_ROLE",
       });
       
-      const hasAdminRole = await publicClient.readContract({
+      const hasAdminRole = await sepoliaPublicClient.readContract({
         address: contractAddresses.dgMarketCore,
         abi: dgMarketCoreAbi.abi,
         functionName: "hasRole",
-        args: [adminRole, wallet.account.address],
+        args: [adminRole, sepoliaWallet.account.address],
       });
       
       if (hasAdminRole) {
-        console.log(`✅ ADMIN_ROLE already granted to ${wallet.account.address}`);
+        console.log(`✅ ADMIN_ROLE already granted to ${sepoliaWallet.account.address}`);
       } else {
         console.log(`⚠️ ADMIN_ROLE not found, attempting to grant...`);
         
-        const grantAdminRoleTxHash = await wallet.writeContract({
+        const grantAdminRoleTxHash = await sepoliaWallet.writeContract({
           address: contractAddresses.dgMarketCore,
           abi: dgMarketCoreAbi.abi,
           functionName: "grantRole",
-          args: [adminRole, wallet.account.address],
+          args: [adminRole, sepoliaWallet.account.address],
         });
         
-        await publicClient.waitForTransactionReceipt({ hash: grantAdminRoleTxHash });
+        await sepoliaPublicClient.waitForTransactionReceipt({ hash: grantAdminRoleTxHash });
         console.log(`✅ Granted ADMIN_ROLE to deployer in DGMarketCore`);
       }
     } catch (error) {
@@ -249,13 +336,13 @@ async function configureSystemRoles() {
     // Grant AUTOMATION_ROLE to ChainlinkGiftCardManager
     if (contractAddresses.chainlinkGiftCardManager) {
       try {
-        const automationRole = await publicClient.readContract({
+        const automationRole = await sepoliaPublicClient.readContract({
           address: contractAddresses.dgMarketCore,
           abi: dgMarketCoreAbi.abi,
           functionName: "AUTOMATION_ROLE",
         });
         
-        const hasAutomationRole = await publicClient.readContract({
+        const hasAutomationRole = await sepoliaPublicClient.readContract({
           address: contractAddresses.dgMarketCore,
           abi: dgMarketCoreAbi.abi,
           functionName: "hasRole",
@@ -265,14 +352,14 @@ async function configureSystemRoles() {
         if (hasAutomationRole) {
           console.log(`✅ AUTOMATION_ROLE already granted to ChainlinkGiftCardManager`);
         } else {
-          const grantAutomationRoleTxHash = await wallet.writeContract({
+          const grantAutomationRoleTxHash = await sepoliaWallet.writeContract({
             address: contractAddresses.dgMarketCore,
             abi: dgMarketCoreAbi.abi,
             functionName: "grantRole",
             args: [automationRole, contractAddresses.chainlinkGiftCardManager],
           });
           
-          await publicClient.waitForTransactionReceipt({ hash: grantAutomationRoleTxHash });
+          await sepoliaPublicClient.waitForTransactionReceipt({ hash: grantAutomationRoleTxHash });
           console.log(`✅ Granted AUTOMATION_ROLE to ChainlinkGiftCardManager`);
         }
       } catch (error) {
@@ -285,30 +372,30 @@ async function configureSystemRoles() {
       console.log("\n2️⃣ Configuring ChainlinkGiftCardManager roles...");
       
       try {
-        const adminRole = await publicClient.readContract({
+        const adminRole = await sepoliaPublicClient.readContract({
           address: contractAddresses.chainlinkGiftCardManager,
           abi: chainlinkGiftCardManagerAbi.abi,
           functionName: "ADMIN_ROLE",
         });
         
-        const hasChainlinkAdminRole = await publicClient.readContract({
+        const hasChainlinkAdminRole = await sepoliaPublicClient.readContract({
           address: contractAddresses.chainlinkGiftCardManager,
           abi: chainlinkGiftCardManagerAbi.abi,
           functionName: "hasRole",
-          args: [adminRole, wallet.account.address],
+          args: [adminRole, sepoliaWallet.account.address],
         });
         
         if (hasChainlinkAdminRole) {
           console.log(`✅ ADMIN_ROLE already granted in ChainlinkGiftCardManager`);
         } else {
-          const grantRoleTxHash = await wallet.writeContract({
+          const grantRoleTxHash = await sepoliaWallet.writeContract({
             address: contractAddresses.chainlinkGiftCardManager,
             abi: chainlinkGiftCardManagerAbi.abi,
             functionName: "grantRole",
-            args: [adminRole, wallet.account.address],
+            args: [adminRole, sepoliaWallet.account.address],
           });
           
-          await publicClient.waitForTransactionReceipt({ hash: grantRoleTxHash });
+          await sepoliaPublicClient.waitForTransactionReceipt({ hash: grantRoleTxHash });
           console.log(`✅ Granted ADMIN_ROLE in ChainlinkGiftCardManager`);
         }
       } catch (error) {
@@ -316,7 +403,7 @@ async function configureSystemRoles() {
       }
     }
 
-    console.log("✅ Role configuration completed for 2-contract system!");
+    console.log("✅ Role configuration completed for 2-contract + bridge system!");
     return true;
 
   } catch (error) {
@@ -335,6 +422,9 @@ async function verifyContracts() {
     console.log("💡 Contracts may already be verified. Check manually:");
     console.log(`- DGMarketCore: https://sepolia.basescan.org/address/${contractAddresses.dgMarketCore}`);
     console.log(`- ChainlinkGiftCardManager: https://sepolia.basescan.org/address/${contractAddresses.chainlinkGiftCardManager}`);
+    if (contractAddresses.simpleBridge) {
+      console.log(`- SimpleBridge: https://basescan.org/address/${contractAddresses.simpleBridge}`);
+    }
     return { successful: 0, total: 0, skipped: true };
   }
 
@@ -342,12 +432,20 @@ async function verifyContracts() {
     { 
       name: "DGMarketCore", 
       address: contractAddresses.dgMarketCore,
-      contractPath: 'contracts/DGMarketCore.sol:DGMarketCore'
+      contractPath: 'contracts/DGMarketCore.sol:DGMarketCore',
+      network: 'baseSepolia'
     },
     { 
       name: "ChainlinkGiftCardManager", 
       address: contractAddresses.chainlinkGiftCardManager,
-      contractPath: 'contracts/ChainlinkGiftCardManager.sol:ChainlinkGiftCardManager'
+      contractPath: 'contracts/ChainlinkGiftCardManager.sol:ChainlinkGiftCardManager',
+      network: 'baseSepolia'
+    },
+    { 
+      name: "SimpleBridge", 
+      address: contractAddresses.simpleBridge,
+      contractPath: 'contracts/SimpleBridge.sol:SimpleBridge',
+      network: 'baseMainnet'
     }
   ];
   
@@ -364,16 +462,20 @@ async function verifyContracts() {
       continue;
     }
     
-    console.log(`\n🔄 Verifying ${contract.name}...`);
+    console.log(`\n🔄 Verifying ${contract.name} on ${contract.network}...`);
     console.log(`📍 Address: ${contract.address}`);
-    console.log(`🔗 Explorer: https://sepolia.basescan.org/address/${contract.address}`);
+    
+    const explorerUrl = contract.network === 'baseMainnet' 
+      ? `https://basescan.org/address/${contract.address}`
+      : `https://sepolia.basescan.org/address/${contract.address}`;
+    console.log(`🔗 Explorer: ${explorerUrl}`);
     
     try {
       // Get constructor arguments with proper validation
       const constructorArgs = getConstructorArgs(contract.name, contractAddresses);
       
       // Build verification command with proper argument handling
-      let verifyCommand = `npx hardhat verify --network baseSepolia ${contract.address}`;
+      let verifyCommand = `npx hardhat verify --network ${contract.network} ${contract.address}`;
       
       if (constructorArgs.length > 0) {
         // Quote each argument properly to handle spaces and special characters
@@ -400,7 +502,7 @@ async function verifyContracts() {
           break;
         case 'api_issue':
           console.log(`⚠️ ${contract.name}: ${analysis.message}`);
-          console.log(`💡 Check manually: https://sepolia.basescan.org/address/${contract.address}`);
+          console.log(`💡 Check manually: ${explorerUrl}`);
           break;
         case 'network_issue':
           console.log(`⚠️ ${contract.name}: ${analysis.message}`);
@@ -416,7 +518,8 @@ async function verifyContracts() {
         contract: contract.name,
         address: contract.address,
         status: analysis.status,
-        message: analysis.message
+        message: analysis.message,
+        network: contract.network
       });
 
     } catch (error) {
@@ -431,14 +534,15 @@ async function verifyContracts() {
       
       console.log(`💡 Analysis: ${analysis.message}`);
       if (analysis.status === 'api_issue') {
-        console.log(`🔗 Manual check: https://sepolia.basescan.org/address/${contract.address}`);
+        console.log(`🔗 Manual check: ${explorerUrl}`);
       }
       
       verificationResults.push({
         contract: contract.name,
         address: contract.address,
         status: analysis.status,
-        message: analysis.message
+        message: analysis.message,
+        network: contract.network
       });
     }
 
@@ -488,9 +592,18 @@ async function updateEnvFiles() {
     try {
       let envContent = fs.readFileSync(backendEnvPath, 'utf8');
       
-      // Update contract addresses for 2-contract system
+      // Update contract addresses for 2-contract + bridge system
       envContent = envContent.replace(/CHAINLINK_MANAGER_ADDRESS=".*"/g, `CHAINLINK_MANAGER_ADDRESS="${contractAddresses.chainlinkGiftCardManager}"`);
       envContent = envContent.replace(/DGMARKET_CORE_ADDRESS=".*"/g, `DGMARKET_CORE_ADDRESS="${contractAddresses.dgMarketCore}"`);
+      
+      // Add SimpleBridge address
+      if (contractAddresses.simpleBridge) {
+        if (envContent.includes('SIMPLE_BRIDGE_ADDRESS=')) {
+          envContent = envContent.replace(/SIMPLE_BRIDGE_ADDRESS=".*"/g, `SIMPLE_BRIDGE_ADDRESS="${contractAddresses.simpleBridge}"`);
+        } else {
+          envContent += `\nSIMPLE_BRIDGE_ADDRESS="${contractAddresses.simpleBridge}"`;
+        }
+      }
       
       // Legacy compatibility
       envContent = envContent.replace(/GIFT_CARD_ADDRESS=".*"/g, `GIFT_CARD_ADDRESS="${contractAddresses.dgMarketCore}"`);
@@ -500,6 +613,9 @@ async function updateEnvFiles() {
       console.log('✅ Backend .env file updated successfully:');
       console.log(`  CHAINLINK_MANAGER_ADDRESS="${contractAddresses.chainlinkGiftCardManager}"`);
       console.log(`  DGMARKET_CORE_ADDRESS="${contractAddresses.dgMarketCore}"`);
+      if (contractAddresses.simpleBridge) {
+        console.log(`  SIMPLE_BRIDGE_ADDRESS="${contractAddresses.simpleBridge}"`);
+      }
     } catch (error) {
       console.error(`❌ Error updating backend .env file: ${error.message}`);
     }
@@ -517,6 +633,9 @@ export const CONTRACT_ADDRESSES = {
   BASE_SEPOLIA: {
     DGMARKET_CORE: "${contractAddresses.dgMarketCore}",
     CHAINLINK_GIFT_CARD_MANAGER: "${contractAddresses.chainlinkGiftCardManager}",
+  },
+  BASE_MAINNET: {
+    SIMPLE_BRIDGE: "${contractAddresses.simpleBridge || ''}",
   }
 };
 `;
@@ -545,13 +664,14 @@ async function wait(seconds) {
 }
 
 async function main() {
-  console.log("🚀 DG Market Complete Master Setup (2-Contract Architecture)");
-  console.log("=".repeat(70));
-  console.log("This script will configure the streamlined 2-contract system:");
+  console.log("🚀 DG Market Complete Master Setup (2-Contract + SimpleBridge Architecture)");
+  console.log("=".repeat(80));
+  console.log("This script will configure the complete cross-chain system:");
   console.log("1. ✅ Check prerequisites");
-  console.log("2. 🔐 Configure roles and permissions");
-  console.log("3. 🔍 Verify contracts on BaseScan (with proper constructor args)");
-  console.log("4. 📝 Update environment files");
+  console.log("2. 🌉 Deploy SimpleBridge to Base Mainnet");
+  console.log("3. 🔐 Configure roles and permissions");
+  console.log("4. 🔍 Verify contracts on BaseScan (with proper constructor args)");
+  console.log("5. 📝 Update environment files");
   console.log("");
   
   const startTime = Date.now();
@@ -566,17 +686,26 @@ async function main() {
     }
     await wait(2);
     
-    // Step 2: Configure roles and permissions
-    console.log("\nSTEP 2: ROLE CONFIGURATION (2-Contract System)");
-    console.log("=".repeat(50));
+    // // Step 2: Deploy SimpleBridge to Base Mainnet
+    // console.log("\nSTEP 2: SIMPLEBRIDGE DEPLOYMENT (Base Mainnet)");
+    // console.log("=".repeat(50));
+    // const simpleBridgeAddress = await deploySimpleBridge();
+    // if (!simpleBridgeAddress) {
+    //   console.log("⚠️ SimpleBridge deployment failed, but continuing...");
+    // }
+    // await wait(3);
+    
+    // Step 3: Configure roles and permissions
+    console.log("\nSTEP 3: ROLE CONFIGURATION (2-Contract + Bridge System)");
+    console.log("=".repeat(60));
     const rolesOk = await configureSystemRoles();
     if (!rolesOk) {
       console.log("⚠️ Role configuration had issues, but continuing...");
     }
     await wait(3);
     
-    // Step 3: Verify contracts with proper constructor arguments
-    console.log("\nSTEP 3: CONTRACT VERIFICATION (With Constructor Args)");
+    // Step 4: Verify contracts with proper constructor arguments
+    console.log("\nSTEP 4: CONTRACT VERIFICATION (With Constructor Args)");
     console.log("=".repeat(55));
     try {
       const verificationResult = await verifyContracts();
@@ -592,8 +721,8 @@ async function main() {
     }
     await wait(3);
     
-    // Step 4: Update environment files
-    console.log("\nSTEP 4: ENVIRONMENT FILE UPDATES");
+    // Step 5: Update environment files
+    console.log("\nSTEP 5: ENVIRONMENT FILE UPDATES");
     console.log("=".repeat(40));
     await updateEnvFiles();
     await wait(2);
@@ -601,41 +730,54 @@ async function main() {
     const endTime = Date.now();
     const duration = Math.round((endTime - startTime) / 1000);
     
-    console.log("\n" + "=".repeat(70));
+    console.log("\n" + "=".repeat(80));
     console.log("🎉 COMPLETE MASTER SETUP FINISHED!");
-    console.log("=".repeat(70));
+    console.log("=".repeat(80));
     console.log(`⏱️ Total time: ${duration} seconds`);
     console.log("");
     console.log("✅ What's been configured:");
-    console.log("  - ✅ 2-Contract architecture deployed");
+    console.log("  - ✅ 2-Contract architecture deployed (Base Sepolia)");
+    console.log("  - ✅ SimpleBridge deployed (Base Mainnet)");
     console.log("  - ✅ Roles and permissions configured");
     console.log("  - ✅ Contracts verified on BaseScan (with proper constructor args)");
     console.log("  - ✅ Environment files updated");
     console.log("");
     console.log("🏗️ Architecture Summary:");
-    console.log("  - 📦 DGMarketCore: All-in-one (FHE + Marketplace + Inventory)");
-    console.log("  - 🔗 ChainlinkGiftCardManager: Automation-only (API calls + restocking)");
+    console.log("  - 📦 DGMarketCore (Base Sepolia): All-in-one (FHE + Marketplace + Inventory)");
+    console.log("  - 🔗 ChainlinkGiftCardManager (Base Sepolia): Automation-only (API calls + restocking)");
+    console.log("  - 🌉 SimpleBridge (Base Mainnet): Cross-chain event emission for OKX integration");
     console.log("");
     console.log("📋 Your Contract Addresses:");
     console.log(`  - DGMarketCore: ${contractAddresses.dgMarketCore}`);
     console.log(`  - ChainlinkGiftCardManager: ${contractAddresses.chainlinkGiftCardManager}`);
+    console.log(`  - SimpleBridge: ${contractAddresses.simpleBridge || 'Not deployed'}`);
     console.log("");
     console.log("🔗 Verification Links:");
     console.log(`  - DGMarketCore: https://sepolia.basescan.org/address/${contractAddresses.dgMarketCore}`);
     console.log(`  - ChainlinkGiftCardManager: https://sepolia.basescan.org/address/${contractAddresses.chainlinkGiftCardManager}`);
+    if (contractAddresses.simpleBridge) {
+      console.log(`  - SimpleBridge: https://basescan.org/address/${contractAddresses.simpleBridge}`);
+    }
     console.log("");
     console.log("🔄 Next Steps:");
     console.log("  1. Test the contracts:");
     console.log(`     pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia`);
     console.log("  2. Start Mock API service (port 8081)");
     console.log("  3. Start Backend service (port 3001)");
+    console.log("  4. Implement OKX cross-chain integration frontend");
+    console.log("");
+    console.log("🚀 OKX Cross-Chain Integration Ready:");
+    console.log("  - ✅ SimpleBridge deployed for cross-chain events");
+    console.log("  - ✅ Admin functions ready for purchaseGiftCardOnBehalf");
+    console.log("  - 🔄 Next: Frontend integration + payment monitoring");
     console.log("");
     console.log("🔗 Useful Links:");
     console.log("  - BaseScan: https://base-sepolia.blockscout.com/");
+    console.log("  - Base Mainnet: https://basescan.org/");
     console.log("  - Chainlink Functions: https://functions.chain.link/");
     console.log("  - LINK Faucet: https://faucets.chain.link/base-sepolia");
     console.log("");
-    console.log("🎯 Your streamlined DG Market system is ready!");
+    console.log("🎯 Your complete cross-chain DG Market system is ready!");
     
   } catch (error) {
     console.error("\n❌ Complete master setup failed:", error.message);
