@@ -44,7 +44,7 @@ function getConstructorArgs(contractName, deployedAddresses) {
       const functionsRouter = process.env.CHAINLINK_FUNCTIONS_ROUTER || "0xf9B8fc078197181C841c296C876945aaa425B278";
       const donId = process.env.CHAINLINK_DON_ID || "0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000";
       const subscriptionId = process.env.CHAINLINK_SUBSCRIPTION_ID || "416";
-      const apiBaseUrl = process.env.GIFT_CARD_API_URL || "http://13.235.164.47:8081";
+      const apiBaseUrl = process.env.GIFT_CARD_API_URL || "http://13.235.164.47:8082";
       
       // Validate all parameters are present
       if (!dgMarketCore) {

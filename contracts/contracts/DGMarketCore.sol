@@ -261,6 +261,7 @@ function getRevealedGiftCard(uint256 cardId)
     });
 }
 
+// FIXED: purchaseGiftCardOnBehalf function with auto-restock trigger
 function purchaseGiftCardOnBehalf(address user, uint256 cardId) 
     external 
     onlyRole(ADMIN_ROLE)  // ✅ Use your existing role system!
@@ -301,6 +302,9 @@ function purchaseGiftCardOnBehalf(address user, uint256 cardId)
     // Update inventory
     categoryInventory[meta.category].count--;
     emit InventoryUpdated(meta.category, categoryInventory[meta.category].count);
+    
+    // ✅ FIXED: Add the missing auto-restock trigger
+    _checkAndTriggerAutoRestock(meta.category);
     
     // Events
     emit GiftCardPurchased(cardId, user, previousOwner, core.publicPrice);

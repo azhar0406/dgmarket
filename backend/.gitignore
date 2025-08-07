@@ -4,3 +4,4 @@ package-lock.json
 
 /admin/.env
 /admin/node_modules
+/node_modules
