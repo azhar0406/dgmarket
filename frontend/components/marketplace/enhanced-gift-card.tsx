@@ -1,9 +1,6 @@
-// components/marketplace/enhanced-gift-card.tsx
-// Enhanced Gift Card Component with OKX cross-chain payment integration
-
 'use client';
 
-import { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { parseUnits } from 'viem';
 import { toast } from 'sonner';
 import { 
@@ -18,36 +15,80 @@ import DGMarketCoreABI from '@/lib/abis/DGMarketCore.json';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Loader2, 
   ShoppingCart, 
   Zap, 
-  DollarSign, 
   Eye,
   EyeOff,
-  ExternalLink 
+  AlertTriangle,
+  WifiOff 
 } from 'lucide-react';
 
 interface EnhancedGiftCardProps {
   listing: any;
   onPurchaseSuccess?: () => void;
+  isCorrectNetwork?: boolean;
 }
 
-export function EnhancedGiftCard({ listing, onPurchaseSuccess }: EnhancedGiftCardProps) {
+export function EnhancedGiftCard({ 
+  listing, 
+  onPurchaseSuccess, 
+  isCorrectNetwork = false 
+}: EnhancedGiftCardProps) {
   const [imageError, setImageError] = useState(false);
   const [showOKXModal, setShowOKXModal] = useState(false);
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null);
 
-  // USDC Purchase functionality (existing)
+  // Direct network detection - same as network status components
+  useEffect(() => {
+    const getCurrentNetwork = async () => {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          const numericChainId = parseInt(chainId, 16);
+          setCurrentChainId(numericChainId);
+          console.log('🔍 Gift card network detected:', numericChainId);
+        } catch (error) {
+          console.error('Failed to get current network:', error);
+        }
+      }
+    };
+
+    getCurrentNetwork();
+
+    // Listen for network changes
+    const handleChainChanged = (chainId: string) => {
+      const numericChainId = parseInt(chainId, 16);
+      setCurrentChainId(numericChainId);
+      console.log('🔄 Gift card network changed to:', numericChainId);
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', handleChainChanged);
+      return () => {
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, []);
+
+  // Use direct detection instead of prop
+  const BASE_MAINNET_CHAIN_ID = 8453;
+  const isActuallyCorrectNetwork = currentChainId === BASE_MAINNET_CHAIN_ID;
+  const isOnBaseSepolia = currentChainId === 84532;
+
+  // Keep USDC functionality for backend logic but hide from UI
   const { purchaseGiftCard, isLoading: isUSDCLoading, currentStep } = usePurchaseGiftCard();
   const { address, usdcBalance, currentAllowance } = useUSDCData(
     CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`
   );
 
-  // Calculate allowance check for USDC
+  // Calculate allowance check for USDC (keep for backend logic)
   const priceInWei = parseUnits(listing.price.toString(), 6);
   const hasSufficientAllowance = checkSufficientAllowance(currentAllowance, priceInWei);
 
-  // Handle USDC purchase (existing functionality)
+  // Handle USDC purchase (keep but don't expose in UI)
   const handlePurchaseWithUSDC = async () => {
     if (!address) {
       toast.error('Please connect your wallet first');
@@ -104,17 +145,6 @@ export function EnhancedGiftCard({ listing, onPurchaseSuccess }: EnhancedGiftCar
     return gradients[category as keyof typeof gradients] || 'from-gray-100 to-gray-200';
   };
 
-  const usdcButtonText = getPurchaseButtonText(
-    !!address,
-    isUSDCLoading,
-    currentStep,
-    listing.isActive,
-    hasSufficientAllowance,
-    listing.price
-  );
-
-  const isButtonDisabled = !listing.isActive || isUSDCLoading || !address;
-
   return (
     <>
       <Card className="group hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border-border/50 bg-card h-full flex flex-col">
@@ -167,11 +197,11 @@ export function EnhancedGiftCard({ listing, onPurchaseSuccess }: EnhancedGiftCar
             )}
           </div>
 
-          {/* Price Badge */}
+          {/* Price Badge - Show in USDC equivalent */}
           <div className="absolute top-3 right-3">
             <Badge className="bg-background/95 text-foreground border border-border/50 backdrop-blur-sm font-semibold text-sm px-3 py-1.5 shadow-sm">
-              <DollarSign className="h-3.5 w-3.5 mr-1" />
-              {listing.price.toFixed(2)} USDC
+              <Zap className="h-3.5 w-3.5 mr-1 text-orange-500" />
+              ~${listing.price.toFixed(2)} ETH
             </Badge>
           </div>
         </div>
@@ -214,64 +244,67 @@ export function EnhancedGiftCard({ listing, onPurchaseSuccess }: EnhancedGiftCar
             </div>
           </div>
 
-          {/* Balance Display */}
-          {address && usdcBalance && (
-            <div className="mb-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                Your USDC balance: ${(Number(usdcBalance) / 1e6).toFixed(2)}
-              </p>
-              {currentAllowance && (
-                <p className="text-xs text-muted-foreground">
-                  Allowance: ${(Number(currentAllowance) / 1e6).toFixed(2)} USDC
-                </p>
-              )}
+          {/* Network Status for Individual Cards */}
+          {!isActuallyCorrectNetwork && (
+            <div className="mb-4">
+              <Alert className="p-3 border-orange-200 bg-orange-50">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs text-orange-700">
+                  {isOnBaseSepolia 
+                    ? "Switch to Base Mainnet to purchase with ETH" 
+                    : "Connect to Base Mainnet to purchase with ETH"
+                  }
+                </AlertDescription>
+              </Alert>
             </div>
           )}
 
-          {/* Payment Buttons */}
+          {/* Payment Button - ETH Only */}
           <div className="mt-auto space-y-3">
-            {/* NEW: OKX Cross-Chain Payment Button */}
+            {/* ETH Cross-Chain Payment Button - Primary */}
             <Button
               onClick={() => setShowOKXModal(true)}
-              disabled={isButtonDisabled}
-              variant="outline"
-              className="w-full h-11 font-medium transition-all duration-200 border-2 border-orange-200 text-orange-600 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700"
-            >
-              <Zap className="h-4 w-4 mr-2" />
-              🚀 Pay with ETH (Cross-Chain)
-            </Button>
-
-            {/* Existing: Direct USDC Payment Button */}
-            <Button
-              onClick={handlePurchaseWithUSDC}
-              disabled={isButtonDisabled}
+              disabled={!listing.isActive || !address || !isActuallyCorrectNetwork}
+              variant="default"
               className={`w-full h-11 font-medium transition-all duration-200 ${
-                listing.isActive && !isUSDCLoading
-                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md"
+                listing.isActive && address && isActuallyCorrectNetwork
+                  ? "bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow-md"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
-              } ${currentStep === 'success' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              }`}
             >
-              {isUSDCLoading && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              {!address ? (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Connect Wallet
+                </>
+              ) : !isActuallyCorrectNetwork ? (
+                <>
+                  <WifiOff className="h-4 w-4 mr-2" />
+                  {isOnBaseSepolia ? "Switch to Base Mainnet" : "Connect to Base Mainnet"}
+                </>
+              ) : !listing.isActive ? (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Not Available
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  🚀 Pay ${listing.price.toFixed(2)} ETH
+                </>
               )}
-              <DollarSign className="h-4 w-4 mr-2" />
-              {usdcButtonText}
             </Button>
 
-            {/* Payment Methods Info */}
+            {/* Payment Method Info - ETH Focused */}
             <div className="text-center text-xs text-muted-foreground space-y-1">
               <p className="flex items-center justify-center gap-2">
                 <Zap className="h-3 w-3 text-orange-500" />
-                ETH auto-swapped via OKX DEX
+                ETH → USDC swap via OKX DEX
               </p>
-              <p className="flex items-center justify-center gap-2">
-                <DollarSign className="h-3 w-3 text-blue-500" />
-                Direct USDC payment
-              </p>
-              <p className="mt-2 border-t pt-2">
+              <p className="border-t pt-2">
                 {listing.isRevealed 
                   ? "Details visible after purchase" 
-                  : "Gift card details hidden until revealed"
+                  : "Gift card details encrypted until revealed"
                 }
               </p>
             </div>

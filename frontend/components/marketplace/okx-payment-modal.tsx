@@ -1,28 +1,32 @@
-// components/marketplace/okx-payment-modal.tsx
-// Complete OKX cross-chain payment modal with step-by-step UI
+// components/okx-payment-modal.tsx
+// FIXED: Progress flow and transaction confirmation
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import React, { useState, useEffect } from 'react';
+import { parseEther, formatEther } from 'viem';
+import { useAccount, useBalance, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Card, CardContent } from '@/components/ui/card';
-import { 
-  Loader2, 
-  ArrowRight, 
-  CheckCircle, 
-  AlertCircle, 
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Loader2,
   Zap,
+  CheckCircle,
+  AlertTriangle,
   ExternalLink,
-  RefreshCw,
-  X,
-  DollarSign,
-  TrendingUp
+  Copy,
+  Clock
 } from 'lucide-react';
-import { useOKXCrossChainPurchase } from '@/hooks/use-okx-cross-chain-purchase';
 
 interface OKXPaymentModalProps {
   isOpen: boolean;
@@ -34,496 +38,544 @@ interface OKXPaymentModalProps {
   onPurchaseSuccess?: () => void;
 }
 
-export function OKXPaymentModal({ 
-  isOpen, 
-  onClose, 
-  cardId, 
-  cardTitle, 
+// Payment Processor API Configuration
+const PAYMENT_API_URL = process.env.NEXT_PUBLIC_PAYMENT_API_URL || 'http://localhost:3001';
+const ADMIN_ADDRESS = '0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09';
+
+// Processing steps
+const PROCESSING_STEPS = [
+  { id: 1, title: 'ETH Payment', description: 'Confirming ETH transaction' },
+  { id: 2, title: 'Admin Processing', description: 'Admin swapping ETH → USDC via OKX' },
+  { id: 3, title: 'Cross-Chain Event', description: 'Emitting bridge event' },
+  { id: 4, title: 'Gift Card Assignment', description: 'Assigning card to your wallet' }
+];
+
+export function OKXPaymentModal({
+  isOpen,
+  onClose,
+  cardId,
+  cardTitle,
   usdcPrice,
   cardImage,
-  onPurchaseSuccess 
+  onPurchaseSuccess
 }: OKXPaymentModalProps) {
-  const [ethPreview, setEthPreview] = useState<any>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
+  const { address } = useAccount();
+  const { data: balance } = useBalance({ address });
+  
+  // Transaction state
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [txHash, setTxHash] = useState<string>('');
+  const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [orderId, setOrderId] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [isWaitingForAPI, setIsWaitingForAPI] = useState(false);
+  
+  // Wagmi hooks for sending ETH
   const { 
-    currentStep,
-    isPurchasing,
-    purchaseWithETH,
-    getETHCostPreview,
-    resetPurchaseState,
-    contracts
-  } = useOKXCrossChainPurchase();
+    data: hash, 
+    sendTransaction, 
+    isPending: isSending, 
+    error: sendError,
+    reset: resetTransaction
+  } = useSendTransaction();
+  
+  // Wait for transaction receipt
+  const { 
+    isLoading: isConfirming, 
+    isSuccess: isConfirmed,
+    error: confirmError 
+  } = useWaitForTransactionReceipt({
+    hash: hash as `0x${string}` | undefined,
+  });
 
-  // Calculate ETH preview when modal opens
+  // Calculate ETH amount needed
+  const ethPrice = 3600; // Approximate ETH price
+  const ethNeeded = (usdcPrice / ethPrice) + (1 / ethPrice);
+
+  // Reset state when modal opens/closes
   useEffect(() => {
-    if (isOpen && !ethPreview && usdcPrice > 0) {
-      setPreviewLoading(true);
-      getETHCostPreview(usdcPrice)
-        .then(preview => {
-          setEthPreview(preview);
-          setPreviewLoading(false);
-        })
-        .catch(error => {
-          console.error('Failed to get ETH preview:', error);
-          setPreviewLoading(false);
-        });
+    if (isOpen) {
+      setCurrentStep(0);
+      setIsProcessing(false);
+      setTxHash('');
+      setProcessingStatus('');
+      setOrderId('');
+      setError('');
+      setIsWaitingForAPI(false);
+      resetTransaction?.();
     }
-  }, [isOpen, usdcPrice, getETHCostPreview, ethPreview]);
+  }, [isOpen, resetTransaction]);
 
-  // Handle payment execution
-  const handlePayment = async () => {
-    try {
-      const result = await purchaseWithETH(cardId, usdcPrice);
-      
-      if (result.success && onPurchaseSuccess) {
-        // Wait a moment for success UI, then trigger refresh
-        setTimeout(() => {
-          onPurchaseSuccess();
-        }, 2000);
+  // Manual confirmation check - FIXED
+  useEffect(() => {
+    if (hash && !isWaitingForAPI && !txHash) {
+      const checkConfirmation = async () => {
+        try {
+          console.log(`🔍 Checking confirmation for ${hash}...`);
+          
+          // Use web3 provider to check receipt manually
+          const receipt = await window.ethereum.request({
+            method: 'eth_getTransactionReceipt',
+            params: [hash],
+          });
+          
+          console.log('📋 Receipt status:', receipt);
+          
+          if (receipt && receipt.status === '0x1') {
+            console.log('✅ Transaction confirmed manually!');
+            setTxHash(hash);
+            setCurrentStep(1);
+            setProcessingStatus('ETH payment confirmed! Processing with OKX...');
+            processPaymentViaAPI(hash, cardId);
+          } else if (receipt && receipt.status === '0x0') {
+            setError('Transaction failed');
+            setIsProcessing(false);
+          }
+        } catch (error) {
+          console.log('⏳ Still waiting for confirmation...');
+          // Continue waiting
+        }
+      };
+
+      // Check immediately if wagmi hook succeeded
+      if (isConfirmed) {
+        console.log('✅ ETH transaction confirmed via wagmi:', hash);
+        setTxHash(hash);
+        setCurrentStep(1);
+        setProcessingStatus('ETH payment confirmed! Processing with OKX...');
+        processPaymentViaAPI(hash, cardId);
+        return;
       }
+
+      // Fallback: Manual checking every 2 seconds
+      const interval = setInterval(checkConfirmation, 2000);
+      
+      // Cleanup interval after 5 minutes
+      setTimeout(() => {
+        clearInterval(interval);
+        if (!txHash) {
+          setError('Transaction confirmation timeout');
+          setIsProcessing(false);
+        }
+      }, 300000);
+
+      return () => clearInterval(interval);
+    }
+  }, [hash, isConfirmed, isWaitingForAPI, txHash, cardId]);
+
+  // Handle send transaction errors
+  useEffect(() => {
+    if (sendError) {
+      console.error('❌ Send transaction error:', sendError);
+      setError(`Transaction failed: ${sendError.message || 'Unknown error'}`);
+      setIsProcessing(false);
+    }
+  }, [sendError]);
+
+  // Handle confirmation errors
+  useEffect(() => {
+    if (confirmError) {
+      console.error('❌ Transaction confirmation error:', confirmError);
+      setError(`Transaction confirmation failed: ${confirmError.message || 'Unknown error'}`);
+      setIsProcessing(false);
+    }
+  }, [confirmError]);
+
+  // Send transaction hash to payment processor API - FIXED
+  const processPaymentViaAPI = async (transactionHash: string, giftCardId: number) => {
+    if (isWaitingForAPI) {
+      console.log('API call already in progress, skipping...');
+      return;
+    }
+
+    setIsWaitingForAPI(true);
+    
+    try {
+      setProcessingStatus('Sending to payment processor...');
+      
+      console.log('🚀 Sending to payment processor API:', {
+        txHash: transactionHash,
+        cardId: giftCardId,
+        userAddress: address
+      });
+
+      const response = await fetch(`${PAYMENT_API_URL}/api/process-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          txHash: transactionHash,
+          cardId: giftCardId,
+          userAddress: address
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Payment processor API success:', result);
+        
+        // Update progress through steps with delays for better UX
+        if (result.swapResult) {
+          setCurrentStep(2);
+          setProcessingStatus(`ETH → USDC swap completed (${result.swapResult.usdcReceived} USDC)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        if (result.bridgeResult) {
+          setCurrentStep(3);
+          setProcessingStatus('Cross-chain event emitted successfully');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        if (result.purchaseResult) {
+          setCurrentStep(4);
+          setProcessingStatus('Gift card assigned successfully!');
+          
+          // Success!
+          setTimeout(() => {
+            toast.success(`Gift card ${giftCardId} assigned successfully!`);
+            if (onPurchaseSuccess) {
+              onPurchaseSuccess();
+            }
+            onClose();
+          }, 2000);
+        }
+        
+        if (result.orderId) {
+          setOrderId(result.orderId);
+        }
+        
+      } else {
+        console.error('❌ Payment processor API error:', result);
+        throw new Error(result.error || 'Payment processing failed');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ API processing error:', error);
+      setError(`Payment processing failed: ${error.message || 'Unknown error'}`);
+      setIsProcessing(false);
+    } finally {
+      setIsWaitingForAPI(false);
+    }
+  };
+
+  // Handle ETH payment - FIXED
+  const handlePayment = async () => {
+    if (!address) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+
+    try {
+      // Check ETH balance
+      const balanceInETH = balance ? Number(formatEther(balance.value)) : 0;
+      if (balanceInETH < ethNeeded) {
+        setError(`Insufficient ETH balance. You have ${balanceInETH.toFixed(6)} ETH, need ${ethNeeded.toFixed(6)} ETH`);
+        return;
+      }
+
+      setIsProcessing(true);
+      setError('');
+      setCurrentStep(0); // Start at step 0 (preparing)
+      setProcessingStatus('Preparing ETH transaction...');
+
+      console.log('💰 Sending ETH payment:', {
+        to: ADMIN_ADDRESS,
+        value: parseEther(ethNeeded.toString()),
+        cardId: cardId
+      });
+
+      await sendTransaction({
+        to: ADMIN_ADDRESS as `0x${string}`,
+        value: parseEther(ethNeeded.toString())
+      });
+
+      setProcessingStatus('ETH transaction sent, waiting for confirmation...');
+      
+    } catch (error: any) {
+      console.error('❌ Payment error:', error);
+      setError(`Payment failed: ${error.message || 'Unknown error'}`);
+      setIsProcessing(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied to clipboard');
     } catch (error) {
-      console.error('Payment execution failed:', error);
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      toast.success('Copied to clipboard');
     }
   };
 
-  // Handle modal close
-  const handleClose = () => {
-    if (!isPurchasing) {
-      resetPurchaseState();
-      setEthPreview(null);
-      setPreviewLoading(false);
-      onClose();
-    }
+  const getStepStatus = (stepIndex: number) => {
+    if (stepIndex < currentStep) return 'completed';
+    if (stepIndex === currentStep) return 'current';
+    return 'pending';
   };
 
-  // Handle retry
-  const handleRetry = () => {
-    resetPurchaseState();
-    setEthPreview(null);
-    setPreviewLoading(false);
+  // Calculate progress percentage - FIXED
+  const getProgressPercentage = () => {
+    if (currentStep === 0 && (isSending || isConfirming)) {
+      return 25; // Transaction in progress
+    }
+    return (currentStep / (PROCESSING_STEPS.length - 1)) * 100;
   };
 
-  // Get step-specific content
-  const getStepContent = () => {
-    if (previewLoading) {
-      return (
-        <div className="text-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-sm text-muted-foreground">Calculating ETH required...</p>
-        </div>
-      );
-    }
-
-    switch (currentStep.step) {
-      case 'idle':
-        return (
-          <div className="space-y-6">
-            {/* Gift Card Preview */}
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  {cardImage && (
-                    <img 
-                      src={cardImage} 
-                      alt={cardTitle}
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-lg">{cardTitle}</h4>
-                    <p className="text-2xl font-bold text-green-600">${usdcPrice} USDC</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Payment Breakdown */}
-            {ethPreview && (
-              <div className="bg-gradient-to-br from-blue-50 to-orange-50 p-4 rounded-lg border">
-                <div className="flex items-center gap-2 mb-3">
-                  <Zap className="w-5 h-5 text-blue-600" />
-                  <h4 className="font-semibold">Cross-Chain Payment Breakdown</h4>
-                </div>
-                
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Gift Card Value:</span>
-                    <span className="font-semibold">{ethPreview.breakdown.cardValue}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Card ETH Cost:</span>
-                    <span className="font-mono">{ethPreview.cardETH} ETH</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Gas & Processing:</span>
-                    <span className="font-mono">{ethPreview.gasETH} ETH</span>
-                  </div>
-                  <div className="border-t pt-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total ETH Payment:</span>
-                      <div className="text-right">
-                        <div className="font-mono font-bold text-lg">{ethPreview.ethRequired} ETH</div>
-                        <div className="text-xs text-muted-foreground">
-                          ≈ {ethPreview.breakdown.total}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* How it Works */}
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                <strong>How it works:</strong> You pay ETH on Base Sepolia. Our admin system 
-                automatically swaps it to USDC on Base Mainnet via OKX DEX and purchases your 
-                gift card. The card will appear in "My Cards" within 2-3 minutes.
-              </AlertDescription>
-            </Alert>
-
-            {/* Current ETH Price */}
-            {ethPreview && (
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <TrendingUp className="w-4 h-4" />
-                  <span>Current ETH Price: ${ethPreview.currentETHPrice?.toFixed(0)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-
-      case 'calculating':
-        return (
-          <div className="text-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-4 text-blue-600" />
-            <p className="font-medium">{currentStep.message}</p>
-            <Progress value={currentStep.progress} className="mt-4" />
-          </div>
-        );
-
-      case 'switching':
-        return (
-          <div className="text-center py-8">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-              <span className="font-medium">Switching to Base Sepolia...</span>
-            </div>
-            <Progress value={currentStep.progress} className="mb-4" />
-            <p className="text-sm text-muted-foreground">
-              Please approve the network switch in your wallet
-            </p>
-          </div>
-        );
-
-      case 'paying':
-        return (
-          <div className="text-center py-8">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Loader2 className="w-6 h-6 animate-spin text-green-600" />
-              <span className="font-medium">Sending ETH Payment...</span>
-            </div>
-            <Progress value={currentStep.progress} className="mb-4" />
-            
-            <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Amount:</span>
-                <span className="font-mono">{currentStep.ethAmount} ETH</span>
-              </div>
-              <div className="flex justify-between">
-                <span>To:</span>
-                <span className="font-mono text-xs">
-                  {contracts.ADMIN_ADDRESS.slice(0, 8)}...{contracts.ADMIN_ADDRESS.slice(-6)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Network:</span>
-                <span className="text-blue-600 font-medium">Base Sepolia</span>
-              </div>
-            </div>
-            
-            <p className="text-sm text-muted-foreground mt-4">
-              Please confirm the transaction in your wallet
-            </p>
-          </div>
-        );
-
-      case 'processing':
-        return (
-          <div className="text-center py-8">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
-              <span className="font-medium">Processing Cross-Chain Purchase...</span>
-            </div>
-            <Progress value={currentStep.progress} className="mb-4" />
-            
-            {currentStep.txHash && (
-              <div className="bg-muted p-4 rounded-lg mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Transaction Hash:</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => window.open(
-                      `https://sepolia.basescan.org/tx/${currentStep.txHash}`,
-                      '_blank'
-                    )}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </Button>
-                </div>
-                <code className="text-xs bg-background px-2 py-1 rounded block">
-                  {currentStep.txHash?.slice(0, 20)}...{currentStep.txHash?.slice(-20)}
-                </code>
-              </div>
-            )}
-
-            {currentStep.orderId && (
-              <div className="bg-blue-50 p-3 rounded-lg mb-4">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Order ID:</span>
-                  <Badge variant="outline" className="ml-2">
-                    {currentStep.orderId}
-                  </Badge>
-                </div>
-              </div>
-            )}
-            
-            <div className="text-left space-y-2 text-sm text-muted-foreground">
-              <p>✅ ETH payment confirmed on Base Sepolia</p>
-              <p>🔄 Admin swapping ETH → USDC on Base Mainnet...</p>
-              <p>🌉 Cross-chain event being processed...</p>
-              <p>🎁 Gift card being assigned to your wallet...</p>
-            </div>
-            
-            <Alert className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                This process typically takes 2-3 minutes. Your gift card will automatically 
-                appear in "My Cards" when complete.
-              </AlertDescription>
-            </Alert>
-          </div>
-        );
-
-      case 'success':
-        return (
-          <div className="text-center py-8">
-            <div className="flex flex-col items-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-xl text-green-600">Payment Successful!</h4>
-                <p className="text-muted-foreground mt-2">
-                  Your gift card is being processed via cross-chain bridge.
-                </p>
-              </div>
-            </div>
-            
-            {currentStep.orderId && (
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Badge variant="outline" className="border-green-300 text-green-700">
-                    Order ID: {currentStep.orderId}
-                  </Badge>
-                </div>
-                <p className="text-sm text-green-700">
-                  Save this Order ID for reference
-                </p>
-              </div>
-            )}
-
-            <Alert>
-              <CheckCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>What's next:</strong> Switch back to Base Sepolia to view your new gift card. 
-                It will appear in "My Cards" within 2-3 minutes as the cross-chain process completes.
-              </AlertDescription>
-            </Alert>
-
-            {currentStep.txHash && (
-              <div className="mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(
-                    `https://sepolia.basescan.org/tx/${currentStep.txHash}`,
-                    '_blank'
-                  )}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  View Transaction
-                </Button>
-              </div>
-            )}
-          </div>
-        );
-
-      case 'error':
-        return (
-          <div className="py-8">
-            <div className="flex flex-col items-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-red-600" />
-              </div>
-              <div className="text-center">
-                <h4 className="font-semibold text-xl text-red-600">Payment Failed</h4>
-                <p className="text-muted-foreground mt-2">
-                  {currentStep.error}
-                </p>
-              </div>
-            </div>
-
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Transaction failed:</strong> {currentStep.message}
-              </AlertDescription>
-            </Alert>
-            
-            <div className="text-sm text-muted-foreground space-y-2">
-              <p><strong>Common solutions:</strong></p>
-              <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>Ensure you have sufficient ETH balance</li>
-                <li>Check your network connection</li>
-                <li>Make sure Base Sepolia is added to your wallet</li>
-                <li>Try refreshing the ETH price estimate</li>
-              </ul>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  // Get action buttons based on current state
-  const getActionButtons = () => {
-    switch (currentStep.step) {
-      case 'idle':
-        return (
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={handleClose} 
-              className="flex-1"
-              disabled={isPurchasing}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handlePayment} 
-              className="flex-1 bg-gradient-to-r from-blue-600 to-orange-600 hover:from-blue-700 hover:to-orange-700"
-              disabled={!ethPreview || isPurchasing}
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Pay {ethPreview?.ethRequired || '...'} ETH
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
-        );
-
-      case 'success':
-        return (
-          <div className="flex gap-3">
-            <Button 
-              variant="outline"
-              onClick={() => window.location.href = '/my-cards'}
-              className="flex-1"
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              View My Cards
-            </Button>
-            <Button 
-              onClick={handleClose} 
-              className="flex-1"
-            >
-              Close
-            </Button>
-          </div>
-        );
-
-      case 'error':
-        return (
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={handleClose} 
-              className="flex-1"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleRetry} 
-              className="flex-1"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Try Again
-            </Button>
-          </div>
-        );
-
-      default:
-        return (
-          <Button disabled className="w-full">
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            {currentStep.message}
-          </Button>
-        );
-    }
-  };
+  if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-blue-600" />
+            <Zap className="h-5 w-5 text-orange-500" />
             Cross-Chain ETH Payment
           </DialogTitle>
           <DialogDescription>
             Pay with ETH via OKX DEX cross-chain bridge
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-6">
-          {/* Progress indicator */}
-          {isPurchasing && (
-            <div className="bg-muted/50 p-3 rounded-lg">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span>Payment Progress</span>
-                <span className="font-medium">{currentStep.progress}%</span>
-              </div>
-              <Progress value={currentStep.progress} className="h-2" />
-            </div>
-          )}
 
-          {/* Step content */}
-          {getStepContent()}
-          
-          {/* Action buttons */}
-          <div className="pt-4 border-t">
-            {getActionButtons()}
+        <div className="space-y-4 pb-2">
+          {/* Gift Card Info */}
+          <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+            {cardImage && (
+              <img
+                src={cardImage}
+                alt={cardTitle}
+                className="w-16 h-16 rounded-md object-cover"
+              />
+            )}
+            <div className="flex-1">
+              <h3 className="font-semibold">{cardTitle}</h3>
+              <p className="text-sm text-muted-foreground">Card #{cardId}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="secondary">
+                  ~${usdcPrice.toFixed(2)} USDC
+                </Badge>
+                <Badge variant="outline">
+                  ~{ethNeeded.toFixed(6)} ETH
+                </Badge>
+              </div>
+            </div>
           </div>
 
-          {/* Technical details (development) */}
-          {process.env.NODE_ENV === 'development' && ethPreview && (
-            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-              <p className="text-xs text-yellow-800 font-medium mb-2">🔧 Development Info:</p>
-              <div className="text-xs text-yellow-700 space-y-1 font-mono">
-                <p>Admin Address: {contracts.ADMIN_ADDRESS.slice(0, 10)}...{contracts.ADMIN_ADDRESS.slice(-6)}</p>
-                <p>Bridge Contract: {contracts.SIMPLE_BRIDGE_MAINNET.slice(0, 10)}...{contracts.SIMPLE_BRIDGE_MAINNET.slice(-6)}</p>
-                <p>DGMarket Contract: {contracts.DGMARKET_CORE_SEPOLIA.slice(0, 10)}...{contracts.DGMARKET_CORE_SEPOLIA.slice(-6)}</p>
-                <p>Current Step: {currentStep.step}</p>
+          {/* Progress Steps - FIXED */}
+          {(isProcessing || isSending || isConfirming || isConfirmed) && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Progress value={getProgressPercentage()} className="flex-1" />
+                <span className="text-sm text-muted-foreground">
+                  {Math.round(getProgressPercentage())}%
+                </span>
+              </div>
+
+              {PROCESSING_STEPS.map((step, index) => {
+                const status = getStepStatus(index);
+                const isCurrentlyProcessing = status === 'current' && (
+                  (index === 0 && (isSending || isConfirming)) ||
+                  (index > 0 && isWaitingForAPI)
+                );
+                
+                return (
+                  <div key={step.id} className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs ${
+                      status === 'completed' 
+                        ? 'bg-green-500 text-white' 
+                        : status === 'current'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {status === 'completed' ? (
+                        <CheckCircle className="h-3 w-3" />
+                      ) : isCurrentlyProcessing ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        step.id
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm leading-tight ${
+                        status === 'completed' ? 'text-green-600' : 
+                        status === 'current' ? 'text-orange-600' : 
+                        'text-muted-foreground'
+                      }`}>
+                        {step.title}
+                        {index === 0 && isSending && ' (Sending...)'}
+                        {index === 0 && isConfirming && ' (Confirming...)'}
+                        {index === 0 && isConfirmed && !isWaitingForAPI && ' (Confirmed!)'}
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-tight">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Status Message */}
+          {processingStatus && (
+            <Alert className="py-2">
+              <Clock className="h-4 w-4" />
+              <AlertDescription className="text-sm leading-tight">{processingStatus}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Transaction Hash */}
+          {txHash && (
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium mb-2">Transaction Hash:</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <code className="text-xs bg-background px-2 py-1 rounded block w-full break-all">
+                    {txHash}
+                  </code>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => copyToClipboard(txHash)}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    asChild
+                  >
+                    <a
+                      href={`https://basescan.org/tx/${txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+
+          {/* Order ID */}
+          {orderId && (
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium mb-1">Order ID:</p>
+              <code className="text-xs text-muted-foreground break-all">{orderId}</code>
+            </div>
+          )}
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="py-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm leading-tight break-words">{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            {!isProcessing && !isConfirmed && !isSending && !isConfirming ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePayment}
+                  disabled={!address}
+                  className="flex-1 bg-orange-600 hover:bg-orange-700"
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  <span className="truncate">Pay {ethNeeded.toFixed(6)} ETH</span>
+                </Button>
+              </>
+            ) : hash && !txHash && !isWaitingForAPI ? (
+              // Show "Force Process" if we have hash but stuck on confirmation
+              <>
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="flex-1"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    console.log('🔄 Force processing transaction:', hash);
+                    setTxHash(hash);
+                    setCurrentStep(1);
+                    setProcessingStatus('Force processing transaction...');
+                    processPaymentViaAPI(hash, cardId);
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  Force Process
+                </Button>
+              </>
+            ) : (
+              <div className="flex-1 text-center py-2">
+                {currentStep >= 4 ? (
+                  <p className="text-green-600 font-medium text-sm">
+                    ✅ Purchase completed successfully!
+                  </p>
+                ) : isSending ? (
+                  <p className="text-orange-600 font-medium text-sm">
+                    🔄 Sending transaction...
+                  </p>
+                ) : isConfirming ? (
+                  <p className="text-orange-600 font-medium text-sm">
+                    ⏳ Waiting for confirmation...
+                  </p>
+                ) : isWaitingForAPI ? (
+                  <p className="text-orange-600 font-medium text-sm">
+                    🔄 Processing cross-chain purchase...
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Processing payment... This typically takes 2-3 minutes.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Debug Info */}
+          {/* {process.env.NODE_ENV === 'development' && (
+            <div className="text-xs text-muted-foreground space-y-1 p-2 bg-muted/30 rounded max-h-32 overflow-y-auto">
+              <p><strong>🔧 Debug Info:</strong></p>
+              <p>Current Step: {currentStep}</p>
+              <p>Is Sending: {isSending.toString()}</p>
+              <p>Is Confirming: {isConfirming.toString()}</p>
+              <p>Is Confirmed: {isConfirmed.toString()}</p>
+              <p>Is Waiting for API: {isWaitingForAPI.toString()}</p>
+              <p className="break-all">Hash: {hash || 'None'}</p>
+              <p className="break-all">API URL: {PAYMENT_API_URL}</p>
+            </div>
+          )} */}
         </div>
       </DialogContent>
     </Dialog>

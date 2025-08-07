@@ -60,7 +60,7 @@ export function useOKXCrossChainPurchase() {
     }
   }, []);
 
-  // Calculate total ETH required for purchase
+  // Calculate total ETH required for purchase with ACCURATE Base gas costs
   const calculateETHRequired = useCallback(async (cardPriceUSDC: number): Promise<ETHCalculation> => {
     setCurrentStep({
       step: 'calculating',
@@ -81,12 +81,18 @@ export function useOKXCrossChainPurchase() {
       // Calculate ETH needed for USDC amount
       const cardETH = cardPriceUSDC / ethPriceUSD;
       
-      // Estimate gas costs for admin operations
-      // (ETH transfer + OKX swap + Bridge event + Sepolia purchase)
-      const gasETH = 0.002; // ~$6 for all admin operations
+      // CORRECTED: Base network gas costs (much lower than Ethereum mainnet)
+      // Base Sepolia typical gas costs:
+      // - Simple ETH transfer: ~21,000 gas × 0.001 gwei = ~0.000021 ETH (~$0.06)
+      // - Contract call: ~50,000 gas × 0.001 gwei = ~0.00005 ETH (~$0.15)
+      // - OKX swap on Base Mainnet: ~150,000 gas × 0.001 gwei = ~0.00015 ETH (~$0.45)
+      // Total realistic gas costs for all operations: ~$0.70 worth of ETH
       
-      // Total with 10% buffer
-      const totalETH = (cardETH + gasETH) * 1.1;
+      const gasUSD = 0.70; // Realistic total gas costs in USD
+      const gasETH = gasUSD / ethPriceUSD; // Convert to ETH
+      
+      // Small buffer for price fluctuations (5% instead of 10%)
+      const totalETH = (cardETH + gasETH) * 1.05;
 
       const calculation: ETHCalculation = {
         cardPriceUSDC,
@@ -176,7 +182,7 @@ export function useOKXCrossChainPurchase() {
         throw new Error('Failed to switch to Base Sepolia');
       }
 
-      // Step 4: Send ETH to admin address with payment metadata
+      // Step 4: Send ETH to admin address (WITHOUT data field)
       setCurrentStep({
         step: 'paying',
         progress: 50,
@@ -187,18 +193,22 @@ export function useOKXCrossChainPurchase() {
       // Create unique order ID for tracking
       const orderId = `okx-${Date.now()}-${cardId}-${address.slice(-6)}`;
       
-      // Send ETH to admin address on Base Sepolia
+      // Log payment details for admin to process
+      console.log('🎯 PAYMENT DETAILS FOR ADMIN:');
+      console.log(JSON.stringify({
+        cardId,
+        userAddress: address,
+        usdcAmount: cardPriceUSDC,
+        orderId,
+        timestamp: Date.now(),
+        ethAmount: calculation.totalETH.toFixed(6)
+      }, null, 2));
+      
+      // Send simple ETH transfer to admin address (NO DATA FIELD)
       const txHash = await sendTransactionAsync({
         to: CONTRACTS.ADMIN_ADDRESS as `0x${string}`,
-        value: parseEther(calculation.totalETH.toString()),
-        // Include metadata in transaction (for admin to process)
-        data: `0x${Buffer.from(JSON.stringify({
-          cardId,
-          userAddress: address,
-          usdcAmount: cardPriceUSDC,
-          orderId,
-          timestamp: Date.now()
-        })).toString('hex')}`
+        value: parseEther(calculation.totalETH.toString())
+        // REMOVED: data field (causes error with EOA addresses)
       });
 
       console.log(`ETH payment sent: ${txHash}`);
@@ -282,7 +292,7 @@ export function useOKXCrossChainPurchase() {
     }
   }, [address, sendTransactionAsync, switchChain, publicClient, calculateETHRequired, checkETHBalance]);
 
-  // Get preview of ETH cost
+  // Get preview of ETH cost with CORRECTED gas calculation
   const getETHCostPreview = useCallback(async (usdcAmount: number) => {
     try {
       const calculation = await calculateETHRequired(usdcAmount);
@@ -292,9 +302,9 @@ export function useOKXCrossChainPurchase() {
         gasETH: calculation.gasETH.toFixed(6),
         currentETHPrice: calculation.currentETHPrice,
         breakdown: {
-          cardValue: `$${calculation.cardPriceUSDC}`,
-          gasEstimate: `≈$${(calculation.gasETH * calculation.currentETHPrice).toFixed(2)}`,
-          total: `≈$${(calculation.totalETH * calculation.currentETHPrice).toFixed(2)}`
+          cardValue: `${calculation.cardPriceUSDC.toFixed(2)}`,
+          gasEstimate: `≈${(calculation.gasETH * calculation.currentETHPrice).toFixed(2)}`,
+          total: `${(calculation.totalETH * calculation.currentETHPrice).toFixed(2)}`
         }
       };
     } catch (error) {

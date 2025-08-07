@@ -1,24 +1,224 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, EyeOff, Shield, ShoppingBag, Gift, Copy, Pin } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Eye, EyeOff, Shield, ShoppingBag, Gift, Copy, Pin, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { useMyPurchasedCards } from '@/hooks/use-my-purchased-cards';
 import { toast } from 'sonner';
 import { createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
 import { CONTRACT_ADDRESSES } from '@/lib/contract-addresses';
-import { decryptValue } from '@/utils/incoEncryption'; // Import the decryptValue function
+import { decryptValue } from '@/utils/incoEncryption';
 import DGMarketCoreABI from '@/lib/abis/DGMarketCore.json';
+
+// Base Sepolia Chain ID
+const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 // Fallback client
 const fallbackPublicClient = createPublicClient({
   chain: baseSepolia,
   transport: http('https://sepolia.base.org'),
 });
+
+// Updated NetworkStatus component for your my-cards-container.tsx
+// Replace the existing NetworkStatus function with this one
+
+function NetworkStatus() {
+  const { chain } = useAccount();
+  const [isChecking, setIsChecking] = useState(false);
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null);
+
+  // Direct network detection - more reliable than wagmi chain
+  useEffect(() => {
+    const getCurrentNetwork = async () => {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          const numericChainId = parseInt(chainId, 16);
+          setCurrentChainId(numericChainId);
+          console.log('🔍 Current network detected:', numericChainId);
+        } catch (error) {
+          console.error('Failed to get current network:', error);
+        }
+      }
+    };
+
+    getCurrentNetwork();
+
+    // Listen for network changes
+    const handleChainChanged = (chainId: string) => {
+      const numericChainId = parseInt(chainId, 16);
+      setCurrentChainId(numericChainId);
+      console.log('🔄 Network changed to:', numericChainId);
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', handleChainChanged);
+      return () => {
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, []);
+
+  // Use direct chain detection as primary, wagmi as fallback
+  const detectedChainId = currentChainId ?? (chain?.id || null);
+  const isCorrectNetwork = detectedChainId === BASE_SEPOLIA_CHAIN_ID;
+  const isBaseMainnet = detectedChainId === 8453;
+
+  const getNetworkName = (chainId: number | null) => {
+    switch (chainId) {
+      case 8453: return 'Base Mainnet';
+      case 84532: return 'Base Sepolia';
+      case 1: return 'Ethereum Mainnet';
+      case 11155111: return 'Sepolia';
+      default: return chain?.name || 'Unknown Network';
+    }
+  };
+
+  const handleSwitchNetwork = async () => {
+    setIsChecking(true);
+    
+    try {
+      // Direct MetaMask network switch call
+      if (typeof window !== 'undefined' && window.ethereum) {
+        console.log('🔄 Attempting to switch to Base Sepolia (84532)...');
+        
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x14a34' }], // 84532 in hex
+        });
+        
+        console.log('✅ Network switch request sent to MetaMask');
+        
+        // Wait for the network to actually change before showing success
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            const newChainId = await window.ethereum.request({ method: 'eth_chainId' });
+            const newNumericChainId = parseInt(newChainId, 16);
+            
+            if (newNumericChainId === BASE_SEPOLIA_CHAIN_ID) {
+              console.log('✅ Network successfully switched to Base Sepolia');
+              setCurrentChainId(BASE_SEPOLIA_CHAIN_ID);
+              toast.success('Successfully switched to Base Sepolia!');
+              
+              // Small delay then reload to ensure UI updates
+              setTimeout(() => {
+                window.location.reload();
+              }, 500);
+              break;
+            }
+          } catch (checkError) {
+            console.log('Still checking network switch...');
+          }
+          attempts++;
+        }
+        
+        if (attempts >= maxAttempts) {
+          console.log('⚠️ Network switch timeout - but may have succeeded');
+          toast.success('Network switch requested - please check MetaMask');
+        }
+        
+      } else {
+        throw new Error('MetaMask not detected');
+      }
+    } catch (error: any) {
+      console.error('❌ Network switch failed:', error);
+      
+      if (error.code === 4001) {
+        toast.error('Network switch cancelled by user');
+      } else if (error.code === 4902) {
+        // Network not added to MetaMask, try adding it
+        console.log('🔧 Network not found, attempting to add Base Sepolia...');
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x14a34', // 84532 in hex
+              chainName: 'Base Sepolia',
+              nativeCurrency: {
+                name: 'Ethereum',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              rpcUrls: ['https://sepolia.base.org'],
+              blockExplorerUrls: ['https://sepolia-explorer.base.org'],
+            }],
+          });
+          toast.success('Base Sepolia added and switched!');
+        } catch (addError: any) {
+          console.error('❌ Failed to add network:', addError);
+          toast.error('Failed to add Base Sepolia. Please add it manually in MetaMask.');
+        }
+      } else {
+        toast.error(`Failed to switch network: ${error.message}`);
+        toast.info('Please switch to Base Sepolia manually in your wallet');
+      }
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  if (isCorrectNetwork) {
+    return (
+      <Alert className="border-green-200 bg-green-50 text-green-800">
+        <Wifi className="h-4 w-4" />
+        <AlertDescription className="flex items-center justify-between w-full">
+          <span>✅ Connected to Base Sepolia - Ready to reveal cards!</span>
+          <Badge variant="secondary" className="bg-green-100 text-green-800">
+            Base Sepolia
+          </Badge>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertDescription className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span>
+            {isBaseMainnet ? '⚠️ Connected to Base Mainnet' : '⚠️ Wrong network detected'}
+          </span>
+          <Badge variant="outline" className="border-yellow-300 text-black">
+            {getNetworkName(detectedChainId)}
+          </Badge>
+        </div>
+        <div>
+          <p className="text-sm mb-2">
+            To reveal your gift cards, please switch to Base Sepolia testnet.
+          </p>
+          <Button
+            size="sm"
+            onClick={handleSwitchNetwork}
+            disabled={isChecking}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white"
+          >
+            {isChecking ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Switching...
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 mr-2" />
+                Switch to Base Sepolia
+              </>
+            )}
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 // Direct function to reveal and decrypt gift card
 async function revealAndDecryptGiftCard(
@@ -29,130 +229,41 @@ async function revealAndDecryptGiftCard(
 ) {
   try {
     console.log('🎯 Starting direct reveal for card:', cardId);
-    console.log('👤 User address:', address);
-    console.log('🔌 Wallet client:', !!walletClient);
-    console.log('🌐 Public client:', !!publicClient);
 
-    // Step 1: Debug what msg.sender is being used
-    console.log('🔍 Testing different contract call methods...');
-    
-    // Method 1: Direct public client call (current failing approach)
-    console.log('📞 Method 1: Direct publicClient.readContract...');
-    try {
-      const myCards1 = await publicClient.readContract({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'getMyGiftCardsWithEncryption',
-        args: []
-      });
-      console.log('✅ Method 1 result:', myCards1);
-      console.log('📊 Method 1 card count:', myCards1.length);
-    } catch (error1: any) {
-      console.error('❌ Method 1 failed:', error1.message);
-    }
+    // First simulate the contract call to check if it will work
+    const simulation = await publicClient.simulateContract({
+      address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+      abi: DGMarketCoreABI,
+      functionName: 'getMyGiftCardsWithEncryption',
+      args: [],
+      account: address as `0x${string}`
+    });
 
-    // Method 2: Try with simulateContract and account parameter
-    console.log('📞 Method 2: simulateContract with account...');
-    try {
-      const simulation = await publicClient.simulateContract({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'getMyGiftCardsWithEncryption',
-        args: [],
-        account: address as `0x${string}` // This should set msg.sender correctly!
-      });
-      const myCards2 = simulation.result;
-      console.log('✅ Method 2 result:', myCards2);
-      console.log('📊 Method 2 card count:', myCards2.length);
-    } catch (error2: any) {
-      console.error('❌ Method 2 failed:', error2.message);
-    }
-
-    // Method 3: Try wallet client readContract if available
-    if (walletClient && typeof walletClient.readContract === 'function') {
-      console.log('📞 Method 3: walletClient.readContract...');
-      try {
-        const myCards3 = await walletClient.readContract({
-          address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-          abi: DGMarketCoreABI,
-          functionName: 'getMyGiftCardsWithEncryption',
-          args: []
-        });
-        console.log('✅ Method 3 result:', myCards3);
-        console.log('📊 Method 3 card count:', myCards3.length);
-      } catch (error3: any) {
-        console.error('❌ Method 3 failed:', error3.message);
-      }
-    } else {
-      console.log('⚠️ Method 3: walletClient.readContract not available');
-    }
-
-    // Now let's use the method that works - try Method 2 first
-    console.log('🎯 Using Method 2 (simulateContract with account) for main logic...');
-    
-    let myCards;
-    try {
-      const contractResult = await publicClient.simulateContract({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'getMyGiftCardsWithEncryption',
-        args: [],
-        account: address as `0x${string}` // CRITICAL: This sets msg.sender correctly!
-      });
-      myCards = contractResult.result;
-    } catch (simulateError: any) {
-      console.error('❌ simulateContract failed, falling back to readContract:', simulateError.message);
-      // Fallback to Method 1
-      myCards = await publicClient.readContract({
-        address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
-        abi: DGMarketCoreABI,
-        functionName: 'getMyGiftCardsWithEncryption',
-        args: []
-      });
-    }
-
-    console.log('📋 Final cards result:', myCards);
-    console.log('📊 Total cards found:', myCards.length);
-
-    if (myCards.length > 0) {
-      console.log('🎴 Card details:');
-      myCards.forEach((card: any, index: number) => {
-        console.log(`   Card ${index + 1}:`, {
-          cardId: card.cardId.toString(),
-          owner: card.owner,
-          isPurchased: card.isPurchased,
-          isRevealed: card.isRevealed,
-          description: card.description
-        });
-      });
-    }
+    const myCards = simulation.result;
+    console.log('📋 User cards found:', myCards.length);
 
     // Find the specific card
     const card = myCards.find((c: any) => c.cardId.toString() === cardId);
     
     if (!card) {
-      const availableCardIds = myCards.map((c: any) => c.cardId.toString());
-      throw new Error(`Card ${cardId} not found in your collection. Available cards: [${availableCardIds.join(', ')}]. You own ${myCards.length} cards total.`);
+      throw new Error(`Card ${cardId} not found in your collection`);
     }
 
-    console.log('🎴 Found target card:', {
+    console.log('🎴 Found card:', {
       cardId: card.cardId.toString(),
-      owner: card.owner,
-      isPurchased: card.isPurchased,
       isRevealed: card.isRevealed,
-      category: card.category,
-      description: card.description
+      category: card.category
     });
 
     let encryptedHandles;
 
     if (card.isRevealed) {
       // Card already revealed - use existing handles
-      console.log('✅ Card already revealed, using existing handles');
+      console.log('✅ Card already revealed');
       encryptedHandles = [card.encryptedCode, card.encryptedPin];
     } else {
       // Need to reveal first
-      console.log('📡 Card not revealed, calling reveal transaction...');
+      console.log('📡 Revealing card...');
       
       const txHash = await walletClient.writeContract({
         address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
@@ -162,10 +273,12 @@ async function revealAndDecryptGiftCard(
       });
 
       console.log('✅ Reveal transaction:', txHash);
+      toast.success('Reveal transaction submitted! Waiting for confirmation...');
+      
+      // Wait for transaction confirmation
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get updated card data
-      console.log('🔄 Getting updated card data...');
       const updatedResult = await publicClient.simulateContract({
         address: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
         abi: DGMarketCoreABI,
@@ -184,22 +297,28 @@ async function revealAndDecryptGiftCard(
       encryptedHandles = [updatedCard.encryptedCode, updatedCard.encryptedPin];
     }
 
-    console.log('🔑 Encrypted handles:', encryptedHandles);
-
-    // Step 2: Decrypt the handles
+    // Step 2: Decrypt the handles using your utility function
     console.log('🔓 Starting decryption...');
     
-    const decryptedData = await decryptWithIncoFHE(walletClient, {
-      encryptedCode: encryptedHandles[0],
-      encryptedPin: encryptedHandles[1]
-    });
+    const [decryptedCode, decryptedPin] = await Promise.all([
+      decryptValue({
+        walletClient,
+        handle: encryptedHandles[0],
+        valueType: 'code'
+      }),
+      decryptValue({
+        walletClient,
+        handle: encryptedHandles[1],
+        valueType: 'pin'
+      })
+    ]);
 
     console.log('✅ Successfully decrypted gift card!');
 
     return {
       success: true,
-      code: decryptedData.code,
-      pin: decryptedData.pin,
+      code: decryptedCode,
+      pin: decryptedPin,
       cardData: card
     };
 
@@ -214,44 +333,7 @@ async function revealAndDecryptGiftCard(
   }
 }
 
-// Decryption function using your utils
-async function decryptWithIncoFHE(
-  walletClient: any, 
-  handles: { encryptedCode: string; encryptedPin: string }
-) {
-  try {
-    console.log('🔐 Starting Inco FHE decryption...');
-    console.log('🔑 Input handles:', handles);
-    
-    // Use your utils functions directly
-    const [decryptedCode, decryptedPin] = await Promise.all([
-      decryptValue({
-        walletClient,
-        handle: handles.encryptedCode,
-        valueType: 'code'
-      }),
-      decryptValue({
-        walletClient,
-        handle: handles.encryptedPin,
-        valueType: 'pin'
-      })
-    ]);
-    
-    console.log('✅ Final decrypted values:');
-    console.log(`   Code: "${decryptedCode}"`);
-    console.log(`   PIN: "${decryptedPin}"`);
-    
-    return {
-      code: decryptedCode,
-      pin: decryptedPin
-    };
-    
-  } catch (error: any) {
-    console.error('❌ Inco FHE decryption failed:', error);
-    throw new Error(`Decryption failed: ${error.message}`);
-  }
-}
-
+// My Cards Container with Network Check
 export function MyCardsContainer() {
   const [isMounted, setIsMounted] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -295,7 +377,7 @@ export function MyCardsContainer() {
 }
 
 function MountedMyCards() {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
   
   if (!address) {
     return (
@@ -328,16 +410,20 @@ function MountedMyCards() {
           </a>
         </Button>
       </div>
+      
+      {/* Network Status Alert */}
+      <NetworkStatus />
+      
       <MyPurchasedCards />
     </div>
   );
 }
 
 export function MyPurchasedCards() {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
   const { data: purchasedCards, isLoading, error, refetch } = useMyPurchasedCards(address);
   
-  // Direct state management instead of complex hook
+  // Direct state management
   const [revealedCards, setRevealedCards] = useState<{[key: string]: {code: string, pin: string}}>({});
   const [revealingCards, setRevealingCards] = useState<{[key: string]: boolean}>({});
   const [visibleCodes, setVisibleCodes] = useState<{[key: string]: boolean}>({});
@@ -347,10 +433,17 @@ export function MyPurchasedCards() {
   const { data: walletClient } = useWalletClient();
   const wagmiPublicClient = usePublicClient();
 
+  const isCorrectNetwork = chain?.id === BASE_SEPOLIA_CHAIN_ID;
+
   // Direct reveal function
   const handleRevealCard = async (cardId: string) => {
     if (!walletClient || !address) {
       toast.error('Wallet not connected');
+      return;
+    }
+
+    if (!isCorrectNetwork) {
+      toast.error('Please switch to Base Sepolia network first');
       return;
     }
 
@@ -501,12 +594,18 @@ export function MyPurchasedCards() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleRevealCard(card.id)}
-                      disabled={isThisCardRevealing}
+                      disabled={isThisCardRevealing || !isCorrectNetwork}
+                      className={!isCorrectNetwork ? 'opacity-50 cursor-not-allowed' : ''}
                     >
                       {isThisCardRevealing ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-2"></div>
                           Decrypting FHE...
+                        </>
+                      ) : !isCorrectNetwork ? (
+                        <>
+                          <WifiOff className="h-4 w-4 mr-2" />
+                          Switch Network First
                         </>
                       ) : (
                         <>
@@ -517,6 +616,16 @@ export function MyPurchasedCards() {
                     </Button>
                   )}
                 </div>
+
+                {/* Network Warning for Individual Cards */}
+                {!isCorrectNetwork && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                    <p className="text-xs text-yellow-700 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Switch to Base Sepolia to reveal this card
+                    </p>
+                  </div>
+                )}
 
                 {/* Gift Card Code Display */}
                 {hasRevealedData && (

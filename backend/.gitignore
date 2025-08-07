@@ -1,3 +1,6 @@
 pnpm-lock.yaml
 package-lock.json
 .env
+
+/admin/.env
+/admin/node_modules
