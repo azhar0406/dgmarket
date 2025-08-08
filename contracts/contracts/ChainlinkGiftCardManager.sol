@@ -79,8 +79,8 @@ contract ChainlinkGiftCardManager is AccessControl, Pausable, FunctionsClient {
     "}"
     ""
     "const giftCardData = restockResponse.data;"
-    "if (!giftCardData || !giftCardData.success || !giftCardData.cardsCreated || giftCardData.cardsCreated.length === 0) {"
-    "  throw Error('No gift cards available for restocking');"
+    "if (!giftCardData) {"
+    "  throw Error('No response data available');"
     "}"
     ""
     "return Functions.encodeString(JSON.stringify(giftCardData));";

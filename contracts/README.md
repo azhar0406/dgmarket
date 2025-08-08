@@ -1,76 +1,232 @@
 # **DGMarket - Smart Contract System**
 
-This repository provides a **complete Hardhat setup** for developing and testing **encrypted gift cards** using **Inco Lightning's Fully Homomorphic Encryption (FHE)** and **Chainlink Functions** for automated restocking.
+This repository provides a **complete Hardhat setup** for developing and testing **encrypted gift cards** using **Inco Lightning's Fully Homomorphic Encryption (FHE)**, **Chainlink Functions** for automated restocking, and **OKX DEX integration** for seamless ETH-to-gift card purchases.
 
-## **Architecture Overview**
+## **🎯 What Makes DGMarket Special**
 
-DGMarket uses a **simplified 2-contract architecture** for optimal efficiency and security:
+**DGMarket** revolutionizes gift card marketplaces by combining:
+- **🔐 Complete Privacy**: Gift card codes encrypted with Inco Lightning FHE
+- **⚡ One-Click Purchases**: ETH payments automatically converted via OKX DEX
+- **🤖 Smart Automation**: Chainlink Functions ensure gift cards are always in stock
+- **🌐 Cross-Chain Magic**: Seamless Base Mainnet → Base Sepolia experience
 
-1. **DGMarketCore.sol** - Simplified core contract (FHE + Marketplace + Inventory + State-based ownership)
-2. **ChainlinkGiftCardManager.sol** - Automation-only contract for restocking
+Users simply send ETH and receive encrypted gift cards - no manual token swaps, no complex DeFi navigation required!
 
-## **Setup Instructions**
+## **🏗️ Architecture Overview**
 
-### **1. Clone the Repository**
-```sh
-git clone <your-repo-url>
-cd into_your_repo
+DGMarket uses a **simplified 2-contract architecture** optimized for privacy and automation:
+
+```mermaid
+flowchart TD
+    classDef coreContract fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#000
+    classDef automationContract fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef externalService fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#000
+    classDef paymentService fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px,color:#000
+
+    User["👤 User\n(Sends ETH)"]
+    PaymentProcessor["💰 Payment Processor\n• OKX DEX Integration\n• ETH → USDC Conversion\n• Cross-chain Events"]
+    
+    DGMarketCore["🎯 DGMarketCore.sol\n• FHE Encryption (Inco)\n• State-based Ownership\n• Marketplace Operations\n• Inventory Tracking\n• Public Price Display"] 
+    
+    ChainlinkManager["🤖 ChainlinkGiftCardManager.sol\n• Chainlink Functions\n• API Integration\n• Automated Restocking\n• Request Management"]
+    
+    IncoLightning["🔒 Inco Lightning\nFHE Encryption"]
+    ChainlinkFunctions["⚡ Chainlink Functions\nAPI Automation"]
+    BackendAPI["🔄 Backend API\nGift Card Generation"]
+    OKXDex["📈 OKX DEX\nETH/USDC Swapping"]
+    
+    User --> |"Send ETH"| PaymentProcessor
+    PaymentProcessor --> |"Swap ETH→USDC"| OKXDex
+    PaymentProcessor --> |"purchaseOnBehalf()"| DGMarketCore
+    
+    ChainlinkManager --> |"automationCreateGiftCard()"| DGMarketCore
+    DGMarketCore --> |"RestockTriggered events"| ChainlinkManager
+    
+    DGMarketCore --> |"FHE encrypt/decrypt"| IncoLightning
+    
+    ChainlinkManager --> |"HTTP requests"| ChainlinkFunctions
+    ChainlinkFunctions --> |"GET /api/restock"| BackendAPI
+    BackendAPI --> |"encrypted gift cards"| ChainlinkFunctions
+    
+    User:::paymentService
+    PaymentProcessor:::paymentService
+    DGMarketCore:::coreContract
+    ChainlinkManager:::automationContract
+    IncoLightning:::externalService
+    ChainlinkFunctions:::externalService
+    BackendAPI:::externalService
+    OKXDex:::externalService
 ```
 
-### **2. Install Dependencies**
-```sh
+## **📋 Smart Contracts**
+
+### **🎯 DGMarketCore.sol - The Heart of Privacy**
+
+**Core Features:**
+- **🔐 FHE Integration**: Gift card codes/PINs encrypted using Inco Lightning
+- **📊 State-Based Ownership**: Clean `mapping(address => uint256[])` tracking
+- **💰 Public Pricing**: Prices visible for marketplace browsing (not encrypted)
+- **🛡️ Resale Protection**: Prevents resale of revealed gift cards
+- **🏪 Inventory Management**: Category-based tracking with auto-restock triggers
+- **👑 Admin Controls**: Role-based access (ADMIN_ROLE, AUTOMATION_ROLE)
+
+**Key Functions:**
+```solidity
+// Create encrypted gift cards (Admin/Automation)
+function adminCreateGiftCard(
+    bytes encryptedCodeInput, 
+    bytes encryptedPinInput,    // 🔒 FHE encrypted PIN
+    uint256 publicPrice,        // 💰 Public price (NOT encrypted)
+    string description, 
+    string category, 
+    string imageUrl, 
+    uint256 expiryDate
+) external onlyRole(ADMIN_ROLE);
+
+// Purchase gift cards on behalf of users (Payment Processor)
+function purchaseGiftCardOnBehalf(address user, uint256 cardId) external;
+
+// Reveal gift cards (returns encrypted code + PIN)
+function revealGiftCard(uint256 cardId) 
+    external returns (euint256 encryptedCode, euint256 encryptedPin);
+
+// Frontend browsing functions
+function getAllGiftCards() external view returns (GiftCardPublicData[] memory);
+function getMyGiftCards() external view returns (GiftCardPublicData[] memory);
+function getGiftCardsByCategory(string memory category) external view returns (GiftCardPublicData[] memory);
+```
+
+**Gift Card Structure:**
+```solidity
+struct GiftCard {
+    uint256 cardId;             // Sequential unique ID
+    euint256 encryptedCode;     // 🔒 FHE encrypted voucher code
+    euint256 encryptedPin;      // 🔒 FHE encrypted security PIN
+    uint256 publicPrice;        // 💰 Public price for browsing
+    address owner;              // Current owner
+    address creator;            // Original creator
+    string category;            // "Gaming", "Food & Dining", etc.
+    string description;         // Public description
+    string imageUrl;            // IPFS image URL
+    bool isRevealed;            // Prevents resale after reveal
+    uint256 createdAt;          // Creation timestamp
+}
+```
+
+### **🤖 ChainlinkGiftCardManager.sol - Automation Engine**
+
+**Core Features:**
+- **⚡ Chainlink Functions**: Automated API calls for restocking
+- **📋 Request Management**: Tracks pending/fulfilled restock requests  
+- **🎯 No Inventory Storage**: All inventory managed by DGMarketCore
+- **📊 Category Monitoring**: Batch checking and triggering
+- **🛠️ Error Handling**: Comprehensive API failure management
+
+**Key Functions:**
+```solidity
+// Monitor and trigger restocking
+function checkAndTriggerRestock(string calldata category) external returns (bool wasTriggered);
+
+// Request restocking via Chainlink Functions
+function requestRestock(string calldata category) external returns (bytes32 requestId);
+
+// Process API responses and create gift cards
+function parseAndCreateGiftCards(string calldata category, bytes calldata response) external;
+```
+
+## **💰 OKX DEX Payment Integration**
+
+### **Payment Flow Architecture:**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant PaymentProcessor
+    participant OKXDex
+    participant Bridge
+    participant DGMarketCore
+    
+    User->>PaymentProcessor: Send ETH to admin address
+    PaymentProcessor->>PaymentProcessor: Detect ETH payment
+    PaymentProcessor->>OKXDex: Get quote (ETH → USDC)
+    OKXDex-->>PaymentProcessor: Return market rate
+    PaymentProcessor->>OKXDex: Execute swap with dynamic slippage
+    OKXDex-->>PaymentProcessor: Return USDC
+    PaymentProcessor->>Bridge: Emit cross-chain purchase event
+    Bridge->>DGMarketCore: Call purchaseGiftCardOnBehalf()
+    DGMarketCore->>DGMarketCore: Transfer gift card to user
+    DGMarketCore-->>User: Gift card delivered to wallet
+```
+
+### **Payment Processor Features:**
+- **🔄 Dynamic Gas Management**: Automatic gas price optimization
+- **🎯 Market Rate Swapping**: Real-time ETH/USDC conversion
+- **🛡️ Slippage Protection**: Automatic adjustment (1% → 3%)
+- **🌉 Cross-Chain Events**: Seamless Base Mainnet → Sepolia
+- **⚡ Concurrent Protection**: Prevents duplicate processing
+
+## **🛠️ Setup Instructions**
+
+### **1. Clone & Install**
+```bash
+git clone <your-repo-url>
+cd dgmarket/contracts
 pnpm install
 ```
 
-### **3. Configure Environment Variables**  
+### **2. Environment Configuration**
 
-Fill in your own information in the `.env` file:
+Create `.env` file with your configuration:
 
 ```plaintext
-# Blockchain Configuration
+# 🔗 Blockchain Configuration
 PRIVATE_KEY_BASE_SEPOLIA=your_private_key_here
 BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+BASE_MAINNET_RPC_URL=https://base.llamarpc.com
 
-# Chainlink Functions Configuration (Base Sepolia)
+# ⚡ Chainlink Functions (Base Sepolia)
 CHAINLINK_FUNCTIONS_ROUTER=0xf9B8fc078197181C841c296C876945aaa425B278
 CHAINLINK_DON_ID=0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000
-CHAINLINK_SUBSCRIPTION_ID=0
+CHAINLINK_SUBSCRIPTION_ID=416
 
-# Verification
+# 🔍 Verification
 ETHERSCAN_API_KEY=your_etherscan_api_key
 
-# API Configuration
-GIFT_CARD_API_URL=http://localhost:8081
-PORT=3001
-LOG_LEVEL=info
+# 🎮 API Configuration
+GIFT_CARD_API_URL=http://localhost:8082
 
-# Inco Lightning Configuration
+# 🔒 Inco Lightning
 INCO_GATEWAY_URL=https://api.inco.org/api/v1
 
-# Testing (optional)
-PRIVATE_KEY_ANVIL=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-SEED_PHRASE=garden cage click scene crystal fat message twice rubber club choice cool
-LOCAL_CHAIN_RPC_URL=http://localhost:8545
+# 💰 OKX DEX API (for payment processor)
+OKX_API_KEY=your_okx_api_key
+OKX_SECRET_KEY=your_okx_secret_key
+OKX_API_PASSPHRASE=your_okx_passphrase
+OKX_PROJECT_ID=your_okx_project_id
+
+# 🌉 Cross-Chain Bridge
+SIMPLE_BRIDGE_MAINNET=your_bridge_contract_address
+ADMIN_ADDRESS=your_admin_wallet_address
+ADMIN_PRIVATE_KEY=your_admin_private_key
 ```
 
-### **4. Compile Smart Contracts**
-```sh
+### **3. Compile Smart Contracts**
+```bash
 pnpm hardhat compile
 ```
 
-### **5. Deploy Contracts**
+### **4. Deploy Complete System**
 
-To deploy the complete DGMarket system:
-
-```sh
+```bash
+# 🚀 Deploy contracts
 pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia --reset
 ```
 
-### **6. Configure the Contracts**
+### **5. Configure the Contracts**
 
 After deployment, run the **one-click setup script**:
 
-```sh
+```bash
 node scripts/complete-master-setup.js
 ```
 
@@ -81,364 +237,241 @@ This automatically handles:
 - ✅ Environment file updates
 - ✅ Category and token configuration
 
-### **7. Run Tests**
+### **6. Run Tests**
 
-```sh
+```bash
 pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia
 ```
-### **8. Sync Frontend ABIs**
 
-```sh
+### **7. Sync Frontend ABIs**
+
+```bash
 node scripts/sync-frontend-abis.js
 ```
 
-### **9. Start Frontend**
+### **8. Start Frontend**
 
-```sh
+```bash
 cd .. && cd frontend && pnpm run dev
 ```
 
-## **DGMarket Smart Contract System**
+### **4. Test Deployment**
 
-## Contract Architecture (Simplified)
+```bash
+# 🧪 Test gift card creation
+pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia
 
-The **simplified 2-contract architecture** provides optimal efficiency and clear separation of concerns:
+# 🔄 Test Chainlink integration
+curl "http://localhost:8082/api/restock?category=Travel"
 
-```mermaid
-flowchart TD
-    classDef coreContract fill:#f96,stroke:#333,stroke-width:3px,color:#000
-    classDef automationContract fill:#9cf,stroke:#333,stroke-width:2px,color:#000
-    classDef externalService fill:#c9f,stroke:#333,stroke-width:2px,color:#000
-    classDef adminService fill:#9f6,stroke:#333,stroke-width:2px,color:#000
+# 💰 Test payment processor
+node scripts/test-payment-flow.js
 
-    Admin["Admin\n(Manual Creation)"]
-    DGMarketCore["DGMarketCore.sol\n(Simplified Core)\n• FHE Encryption\n• State-based Ownership\n• Marketplace Operations\n• Inventory Tracking\n• Multi-ERC20 Support\n• Public Price Display"] 
-    
-    ChainlinkManager["ChainlinkGiftCardManager.sol\n(Automation Only)\n• Chainlink Functions\n• API Integration\n• Request Management\n• No Inventory Storage"]
-    
-    IncoLightning["Inco Lightning\nFHE Encryption"]
-    ChainlinkFunctions["Chainlink Functions\nAPI Automation"]
-    BackendAPI["Backend API\nGift Card Data"]
-    Frontend["Frontend\nNext.js + React"]
-    
-    Admin --> |"adminCreateGiftCard()"| DGMarketCore
-    ChainlinkManager --> |"automationCreateGiftCard()"| DGMarketCore
-    DGMarketCore --> |"RestockTriggered events"| ChainlinkManager
-    
-    DGMarketCore --> |"FHE operations"| IncoLightning
-    
-    ChainlinkManager --> |"API calls"| ChainlinkFunctions
-    ChainlinkFunctions --> |"HTTP requests"| BackendAPI
-    BackendAPI --> |"gift card data"| ChainlinkFunctions
-    
-    Frontend --> |"View functions"| DGMarketCore
-    Frontend --> |"getAllGiftCards()"| DGMarketCore
-    Frontend --> |"getMyGiftCards()"| DGMarketCore
-    Frontend --> |"getGiftCardsByCategory()"| DGMarketCore
-    
-    Admin:::adminService
-    DGMarketCore:::coreContract
-    ChainlinkManager:::automationContract
-    IncoLightning:::externalService
-    ChainlinkFunctions:::externalService
-    BackendAPI:::externalService
-    Frontend:::externalService
+# 📦 Ensure frontend has latest ABIs
+node scripts/sync-frontend-abis.js
 ```
 
-## Key Components
+## **📁 Project Structure**
 
-### **DGMarketCore.sol - The Simplified Solution**
-
-**Core Features:**
-- **State-Based Ownership**: Clean address-based gift card ownership tracking
-- **FHE Integration**: Encrypted gift card codes and PINs using `{euint256, ebool, e} from "@inco/lightning/src/Lib.sol"`
-- **No NFT Complexity**: Removed ERC721 inheritance for cleaner implementation
-- **Marketplace Operations**: Complete buying/selling/listing functionality
-- **Resale Restrictions**: `isRevealed[cardId]` tracking prevents resale after revelation
-- **Multi-ERC20 Support**: Accept any ERC20 token for payments
-- **Inventory Management**: Category-based tracking with automatic restock triggers
-- **Admin-Only Creation**: Role-based access control (ADMIN_ROLE, AUTOMATION_ROLE)
-- **Public Price Display**: Gift card prices are NOT encrypted for frontend browsing
-
-**Key Functions:**
-```solidity
-// Admin creates gift cards with FHE encryption (UPDATED: PIN instead of value)
-function adminCreateGiftCard(
-    bytes encryptedCodeInput, 
-    bytes encryptedPinInput,    // ✅ FIXED: PIN encryption instead of value
-    uint256 publicPrice,        // Public price (NOT encrypted)
-    string description, 
-    string category, 
-    string imageUrl, 
-    uint256 expiryDate
-) external onlyRole(ADMIN_ROLE);
-
-// Automation creates gift cards (called by ChainlinkManager)
-function automationCreateGiftCard(
-    bytes encryptedCodeInput,
-    bytes encryptedPinInput,    // ✅ FIXED: PIN encryption instead of value
-    uint256 publicPrice,
-    string description,
-    string category,
-    string imageUrl,
-    uint256 expiryDate
-) external onlyRole(AUTOMATION_ROLE);
-
-// Users reveal gift cards (returns both code and PIN)
-function revealGiftCard(uint256 cardId) 
-    external returns (euint256 encryptedCode, euint256 encryptedPin);
-
-// Users purchase/list gift cards
-function purchaseGiftCard(uint256 listingId, uint256 paymentAmount);
-function listGiftCard(uint256 cardId, address paymentToken, uint256 price);
-
-// Frontend view functions
-function getAllGiftCards() returns (GiftCardPublicData[] memory);
-function getMyGiftCards() returns (GiftCardPublicData[] memory);
-function getGiftCardsByCategory(string category) returns (GiftCardPublicData[] memory);
+```
+contracts/
+├── contracts/
+│   ├── DGMarketCore.sol                    # 🎯 Main core contract with FHE
+│   ├── ChainlinkGiftCardManager.sol        # 🤖 Automation contract
+│   └── SimpleBridge.sol                    # 🌉 Cross-chain bridge
+├── ignition/modules/
+│   ├── DGMarketComplete.ts                 # 🚀 Complete deployment
+│   └── SimpleBridge.ts                     # 🌉 Bridge deployment
+├── scripts/
+│   ├── complete-master-setup.js            # ⚙️ One-click configuration
+│   ├── sync-frontend-abis.js               # 📦 ABI synchronization
+│   └── test-payment-flow.js                # 💰 Payment testing
+├── test/
+│   ├── AdminGiftCard.test.js               # 🧪 Core functionality tests
+│   └── ChainlinkIntegration.test.js        # ⚡ Automation tests
+└── backend/
+    ├── index.js                            # 🔄 Gift card API server
+    ├── payment-processor.js                # 💰 OKX DEX integration
+    └── admin/                              # 👑 Admin management tools
 ```
 
-**Updated Data Structures (PIN Encryption):**
+## **🔐 Security & Privacy Features**
+
+### **Inco Lightning FHE Integration**
 ```solidity
-struct GiftCard {
-    uint256 cardId;             // Sequential unique ID
-    euint256 encryptedCode;     // 🔒 FHE encrypted voucher code
-    euint256 encryptedPin;      // 🔒 FHE encrypted PIN (FIXED: was encryptedValue)
-    uint256 publicPrice;        // 🔓 Public price (already in USDC/USDT)
-    address owner;              // Current owner
-    address creator;            // Original creator
-    string category;            // Category for browsing
-    string description;         // Public description
-    bool isRevealed;            // Prevents resale after reveal
-    uint256 createdAt;          // Creation timestamp
-    // ... other public metadata
+// 🔒 Fully Homomorphic Encryption
+import {euint256, ebool, TFHE} from "@inco/lightning/src/Lib.sol";
+
+// Encrypt gift card codes and PINs
+euint256 encryptedCode = TFHE.asEuint256(encryptedCodeInput);
+euint256 encryptedPin = TFHE.asEuint256(encryptedPinInput);
+
+// Only owner can decrypt
+function revealGiftCard(uint256 cardId) external returns (euint256, euint256) {
+    require(giftCards[cardId].owner == msg.sender, "Not card owner");
+    require(!isRevealed[cardId], "Card already revealed");
+    
+    isRevealed[cardId] = true; // Prevent resale
+    return (giftCards[cardId].encryptedCode, giftCards[cardId].encryptedPin);
 }
 ```
 
-**Why PIN Instead of Value?**
-- **✅ Public Price**: Gift card prices are already public for marketplace browsing
-- **✅ Logical Security**: Voucher codes and PINs are the sensitive data that needs encryption
-- **✅ Real-World Usage**: Gift cards typically have redemption codes + security PINs
-- **✅ No Double Encryption**: No need to encrypt value when price is already public
-
-### **ChainlinkGiftCardManager.sol - Automation Engine**
-
-**Core Features:**
-- **Chainlink Functions Integration**: Automated API calls for restocking
-- **Request Management**: Tracks pending/fulfilled restock requests  
-- **No Inventory Storage**: All inventory managed by DGMarketCore
-- **Category Monitoring**: Batch checking and triggering for multiple categories
-- **Error Handling**: Comprehensive error management for API failures
-
-**Key Functions:**
+### **Role-Based Access Control**
 ```solidity
-// Monitor and trigger restocking for categories
-function checkAndTriggerRestock(string calldata category) returns (bool wasTriggered);
+// 👑 Admin-only gift card creation
+function adminCreateGiftCard(...) external onlyRole(ADMIN_ROLE) {
+    categoryInventory[category].count++; // Update inventory
+}
 
-// Request restocking via Chainlink Functions
-function requestRestock(string calldata category) returns (bytes32 requestId);
-
-// Process API response and create gift cards
-function parseAndCreateGiftCards(string calldata category, bytes calldata response);
+// 🤖 Automation-only creation
+function automationCreateGiftCard(...) external onlyRole(AUTOMATION_ROLE) {
+    categoryInventory[category].count++; // Update inventory
+}
 ```
 
-## **Project Structure**
+### **Resale Protection**
+```solidity
+// 🛡️ Prevent resale of revealed cards
+mapping(uint256 => bool) public isRevealed;
 
-```
-your-project/
-├── contracts/
-│   ├── DGMarketCore.sol                    # Main core contract
-│   └── ChainlinkGiftCardManager.sol        # Automation contract
-├── ignition/
-│   └── modules/
-│       └── DGMarketComplete.ts             # ✅ Deployment module (FIXED)
-├── scripts/
-│   └── complete-master-setup.js            # ✅ Master setup script
-├── test/
-│   └── AdminGiftCard.test.js               # ✅ Admin tests (FIXED for PIN)
-├── utils/
-│   └── wallet.js                           # Wallet utilities
-└── README.md                               # This file
+function listGiftCard(uint256 cardId, address paymentToken, uint256 price) external {
+    require(!isRevealed[cardId], "CardAlreadyRevealed");
+    // Create listing...
+}
 ```
 
-## **Frontend Integration**
+## **🎮 Available Gift Card Categories**
 
-### **Simplified View Functions**
+The system supports diverse categories with automated restocking:
 
-The new architecture provides clean, efficient frontend integration:
+- **🎮 Gaming**: Google Play, League of Legends, Teamfight Tactics, Legends of Runeterra
+- **🍔 Food & Dining**: KFC, McDonald's, Zomato
+- **🛍️ Shopping**: Amazon Prime, Universal Vouchers, Premium Gift Cards
+- **✈️ Travel**: Air India, Uber Rides
+- **🎬 Entertainment**: Premium subscriptions, access cards, promotional offers
 
-```javascript
-// Browse all available gift cards
-const allCards = await dgMarketContract.read.getAllGiftCards();
-// Returns: GiftCardPublicData[] with cardId, publicPrice, category, description, etc.
+## **🔄 Automated Restocking System**
 
-// Browse by category
-const amazonCards = await dgMarketContract.read.getGiftCardsByCategory(["Amazon"]);
-// Returns: Only Amazon gift cards with public pricing
-
-// User's dashboard - their purchased cards
-const myCards = await dgMarketContract.read.getMyGiftCards();
-// Uses msg.sender, returns user's owned cards
-
-// User reveals their card (returns both code and PIN)
-const [encryptedCode, encryptedPin] = await dgMarketContract.write.revealGiftCard([cardId]);
-// Frontend decrypts both using fhevmjs
+```mermaid
+sequenceDiagram
+    participant User
+    participant DGMarketCore
+    participant ChainlinkManager
+    participant ChainlinkFunctions
+    participant BackendAPI
+    
+    User->>DGMarketCore: Purchase/reveal gift card
+    DGMarketCore->>DGMarketCore: Update category inventory
+    Note over DGMarketCore: Check if count <= threshold
+    DGMarketCore->>ChainlinkManager: Trigger restock request
+    ChainlinkManager->>ChainlinkFunctions: requestRestock(category)
+    ChainlinkFunctions->>BackendAPI: HTTP GET /api/restock?category=X
+    BackendAPI->>BackendAPI: Generate encrypted gift cards
+    BackendAPI-->>ChainlinkFunctions: Return gift card data
+    ChainlinkFunctions-->>ChainlinkManager: fulfillRequest(response)
+    ChainlinkManager->>DGMarketCore: automationCreateGiftCard(encrypted_data)
+    DGMarketCore->>DGMarketCore: Add cards + update inventory
 ```
 
-### **Frontend Flow Example**
+## **🧪 Testing Framework**
 
-```javascript
-// 1. Browse available cards
-const browseCards = async () => {
-  const cards = await dgMarketContract.read.getAllGiftCards();
-  return cards.map(card => ({
-    id: card.cardId,
-    price: card.publicPrice,          // 🔓 Public price display
-    category: card.category,          // For filtering
-    description: card.description,    // Public info
-    available: card.isActive && !card.isRevealed
-  }));
-};
-
-// 2. User dashboard
-const getUserCards = async () => {
-  const myCards = await dgMarketContract.read.getMyGiftCards();
-  return myCards.map(card => ({
-    id: card.cardId,
-    price: card.publicPrice,
-    revealed: card.isRevealed,
-    canReveal: !card.isRevealed,
-    canResell: !card.isRevealed
-  }));
-};
-
-// 3. Reveal gift card (get both code and PIN)
-const revealCard = async (cardId) => {
-  const [encryptedCode, encryptedPin] = await dgMarketContract.write.revealGiftCard([cardId]);
-  const decryptedCode = await fhevmjs.decrypt(encryptedCode, userKey);
-  const decryptedPin = await fhevmjs.decrypt(encryptedPin, userKey);
-  return { code: decryptedCode, pin: decryptedPin };
-};
-```
-
-## **Testing**
-
-### **Current Test Files**
-
-1. **`test/AdminGiftCard.test.js`** - ENHANCED for comprehensive testing
-   - ✅ Tests admin gift card creation with PIN encryption across ALL 5 deployment categories
-   - ✅ Tests inventory tracking and verification
-   - ✅ Tests all gift card retrieval functions (getAllGiftCards, getMyGiftCards, getGiftCardsByCategory)
-   - ✅ Tests reveal functionality with both code and PIN
-   - ✅ Includes Inco Lightning encryption with fallback dummy data
-   - ✅ Real deployment configuration verification
-
-### **Run Tests**
+### **Smart Contract Tests**
 ```bash
-# Run admin tests
+# Test core functionality
 pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia
-
-# Run all tests
-pnpm hardhat test
 
 # Test with coverage
 pnpm hardhat coverage
+
+# Test specific functions
+pnpm hardhat test --grep "should create gift card with PIN encryption"
 ```
 
 ### **Integration Tests**
 ```bash
-# Test complete flow
-node scripts/test-complete-flow.js
+# Test complete payment flow
+node scripts/test-payment-flow.js
 
 # Test Chainlink integration
-node scripts/test-chainlink-flow.js
+node scripts/test-chainlink-functions.js
+
+# Test OKX DEX integration
+node scripts/test-okx-integration.js
 ```
 
-## **Deployment**
+## **⚡ Frontend Integration**
 
-### **1. Deploy System**
+### **Simplified View Functions**
+```javascript
+// 🏪 Browse marketplace
+const allCards = await dgMarketContract.read.getAllGiftCards();
+
+// 🎯 Filter by category
+const gamingCards = await dgMarketContract.read.getGiftCardsByCategory(["Gaming"]);
+
+// 👤 User dashboard
+const myCards = await dgMarketContract.read.getMyGiftCards();
+
+// 🔓 Reveal gift card (owner only)
+const [encryptedCode, encryptedPin] = await dgMarketContract.write.revealGiftCard([cardId]);
+const decryptedCode = await incoSDK.decrypt(encryptedCode);
+const decryptedPin = await incoSDK.decrypt(encryptedPin);
+```
+
+### **Payment Integration**
+```javascript
+// 💰 Simple ETH payment (OKX handles conversion)
+const paymentProcessor = new PaymentProcessor(config);
+const result = await paymentProcessor.processTransactionHash(txHash, cardId, userAddress);
+
+// User just sends ETH - system handles the rest!
+```
+
+## **🔧 Development Commands**
+
 ```bash
+# 📦 Compile contracts
+pnpm hardhat compile
+
+# 🚀 Deploy system
 pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia
-```
 
-### **2. Configure System**
-```bash
+# ⚙️ Setup system
 node scripts/complete-master-setup.js
+
+# 🔄 Sync ABIs
+node scripts/sync-frontend-abis.js
+
+# 🧪 Run tests
+pnpm hardhat test --network baseSepolia
+
+# 🔍 Verify contracts
+pnpm hardhat verify DEPLOYED_CONTRACT_ADDRESS --network baseSepolia
 ```
 
-### **3. Test System**
-```bash
-pnpm hardhat test test/AdminGiftCard.test.js --network baseSepolia
-```
+## **📈 Key Achievements**
 
-## **Security Architecture**
+- ✅ **Complete Privacy**: Gift card codes fully encrypted with FHE
+- ✅ **Seamless Payments**: ETH → Gift cards via OKX DEX integration  
+- ✅ **Auto-Restocking**: Chainlink Functions ensure constant availability
+- ✅ **Cross-Chain**: Smooth Base Mainnet → Sepolia experience
+- ✅ **Gas Optimized**: Dynamic gas management and slippage protection
+- ✅ **Production Ready**: Comprehensive testing and error handling
 
-### **PIN-Based Encryption Security**
+## **🤝 Contributing**
 
-```solidity
-// SECURE: PIN + Code encryption (not value)
-struct GiftCard {
-    euint256 encryptedCode;     // 🔒 Encrypted voucher code
-    euint256 encryptedPin;      // 🔒 Encrypted security PIN
-    uint256 publicPrice;        // 🔓 Public price for browsing
-}
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
 
-// SECURE: Reveal returns both encrypted values
-function revealGiftCard(uint256 cardId) 
-    external returns (euint256 encryptedCode, euint256 encryptedPin) {
-    // User decrypts both on frontend
-}
-```
-
-### **Admin-Only Gift Card Creation**
-
-```solidity
-// SECURE: Only admins and automation can create gift cards
-function adminCreateGiftCard(...) external onlyRole(ADMIN_ROLE) {
-    // Update inventory for admin-created cards (FIXED)
-    categoryInventory[category].count++;
-}
-
-function automationCreateGiftCard(...) external onlyRole(AUTOMATION_ROLE) {
-    // Update inventory for automation-created cards
-    categoryInventory[category].count++;
-}
-```
-
-## **Key Fixes Applied**
-
-### **1. PIN Encryption (Fixed)**
-- ✅ Changed `encryptedValueInput` to `encryptedPinInput`
-- ✅ Gift cards now encrypt Code + PIN (not value)
-- ✅ Public price remains unencrypted for marketplace browsing
-
-### **2. Inventory Updates (Fixed)**
-- ✅ `adminCreateGiftCard` now updates inventory count
-- ✅ Both admin and automation creation paths work consistently
-
-### **3. Deployment Module (Fixed)**
-- ✅ Uncommented category configuration in `DGMarketComplete.ts`
-- ✅ Uncommented token configuration
-- ✅ All 5 categories deployed automatically
-
-### **4. Test Files (Fixed)**
-- ✅ Updated `AdminGiftCard.test.js` for PIN encryption
-- ✅ Added comprehensive inventory testing
-- ✅ Added category-based retrieval testing
-
-## **Next Steps**
-
-1. **Deploy** using fixed `DGMarketComplete.ts`
-2. **Run** `complete-master-setup.js` for configuration
-3. **Test** with updated `AdminGiftCard.test.js`
-4. **Integrate** frontend with PIN-based revelation
-
-## **Support**
+## **📞 Support**
 
 - **GitHub Issues**: Report bugs and feature requests
-- **Documentation**: Check `/docs` folder for detailed guides
-- **Discord**: Join our development community
+- **Documentation**: Check `/docs` for detailed guides
+- **Base Sepolia Explorer**: [https://sepolia.basescan.org](https://sepolia.basescan.org)
 
 ---
 
-🎯 **Your DG Market system is now production-ready with PIN encryption and proper inventory tracking!**
+**🎯 DGMarket Smart Contracts: Where privacy meets automation in the gift card marketplace revolution!**

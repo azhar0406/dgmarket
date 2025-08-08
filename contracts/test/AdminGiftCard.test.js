@@ -122,8 +122,8 @@ const REAL_GIFT_CARD_PORTFOLIO = [
     imageUrl: `${IPFS_BASE}air_india.png`
   },
   {
-    code: "UBER-RIDES-CREDIT-2025",
-    pin: "5502",
+    code: "Q2B7MNGCMSS4H",
+    pin: "6004910011112953",
     publicPrice: parseUnits("0.01", 6), // 2 USDC
     category: "Travel",
     description: "Uber Rides Credit Card",

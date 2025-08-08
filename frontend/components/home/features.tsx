@@ -15,7 +15,7 @@ const features = [
   {
     icon: Coins,
     title: 'Multi-Token Support',
-    description: 'Accept payments in various ERC-20 tokens with real-time price feeds from Chainlink.',
+    description: 'Accept payments in ETH and swap to various ERC-20 tokens with real-time OKX Dex API',
     color: 'text-green-600',
   },
   {

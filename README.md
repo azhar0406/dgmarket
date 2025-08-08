@@ -1,451 +1,274 @@
-# DG Market
+# DGMarket
 
-A decentralized gift card marketplace using Inco Lightning's Fully Homomorphic Encryption (FHE) for confidential gift card values and Chainlink Functions for automated gift card restocking.
+**DGMarket** is a revolutionary decentralized gift card marketplace that combines privacy, automation, and seamless payment experiences. Built on Base Sepolia, DGMarket uses Inco Lightning's Fully Homomorphic Encryption (FHE) to keep gift card codes completely private while enabling automated inventory management through Chainlink Functions.
 
-## Features
+## 🎯 How DGMarket Works
 
-- **Privacy-First Design**: Encrypted gift card values using Inco Lightning FHE
-- **Multi-Token Support**: Accept payments in various ERC-20 tokens
-- **Simplified State-Based Ownership**: Clean address-based gift card ownership tracking
-- **Autonomous Restocking**: Automated gift card inventory management via Chainlink Functions
-- **Owner-Only Access**: Only gift card owners can view and decrypt their gift card values
-- **Resale Restrictions**: Once a gift card is revealed, it cannot be resold
-- **Admin-Only Creation**: Only authorized admins and automation can create gift cards
-- **Public Price Display**: Gift card prices are publicly visible for browsing
+### **Privacy-First Design**
+When gift cards are created, their codes and PINs are encrypted using Inco Lightning's FHE technology. Only the rightful owner can decrypt and view their gift card details, ensuring complete privacy and security.
 
-## Tech Stack
+### **Seamless ETH-to-Gift Card Flow**
+Users can purchase gift cards using ETH through an integrated **OKX DEX API**. The system automatically:
+- ✅ Accepts ETH payments on Base Mainnet
+- ✅ Swaps ETH to USDC via OKX DEX at market rates
+- ✅ Processes cross-chain events to Base Sepolia
+- ✅ Automatically delivers encrypted gift cards to users' wallets
 
-### Frontend
-- Next.js 13.5, React 18
-- Wagmi v2, Viem v2
-- fhevmjs for FHE encryption
-- Radix UI, shadcn/ui components
-- Zustand, React Query
-- Frontend is ready - check the codebase in @frontend directory
+### **Autonomous Inventory Management**
+The platform features intelligent restocking through Chainlink Functions. When inventory runs low, the system automatically calls external APIs to replenish gift card stock, ensuring continuous availability across categories like Gaming, Food & Dining, Travel, and Entertainment.
 
-### Backend
+## ⚡ Ecosystem Benefits
+
+- **One-Click Purchases**: Users simply send ETH - no need to manually swap tokens or navigate complex DeFi protocols
+- **Complete Privacy**: Gift card codes remain encrypted on-chain until revealed by the owner
+- **Always Available**: Automated restocking ensures gift cards are always in stock
+- **Multi-Category Support**: From gaming credits to travel vouchers, diverse gift card categories for every need
+- **Cross-Chain Efficiency**: Optimized for Base ecosystem with seamless mainnet-to-testnet bridging
+
+## 🏗️ Architecture Overview
+
+DGMarket uses a **simplified 2-contract architecture** for optimal efficiency:
+
+1. **DGMarketCore.sol** - Core contract (FHE + Marketplace + Inventory + State-based ownership)
+2. **ChainlinkGiftCardManager.sol** - Automation-only contract for restocking
+
+## 🚀 Tech Stack
+
+### **Smart Contracts**
+- Solidity 0.8.24 with OpenZeppelin contracts
+- Inco Lightning FHE for encryption
+- Chainlink Functions v1.0.0 for automation
+- Base Sepolia testnet deployment
+
+### **Backend**
 - Node.js with Express
+- Inco Lightning SDK for encryption
+- OKX DEX API integration
 - Ethers.js for blockchain interaction
-- fhevmjs for gift card value encryption
-- Winston for logging
-- Axios for API requests
-- Event monitoring for automated restocking
+- Winston logging and comprehensive error handling
 
-### Smart Contracts (2-Contract Architecture)
-- Solidity 0.8.24
-- OpenZeppelin contracts
-- Chainlink Functions v1.0.0
-- Inco Lightning FHE
-- **DGMarketCore.sol** - Simplified core contract (FHE + Marketplace + Inventory)
-- **ChainlinkGiftCardManager.sol** - Automation-only contract for restocking
+### **Frontend**
+- Next.js 13.5 with React 18
+- Wagmi v2 and Viem v2 for Web3 integration
+- Inco Lightning SDK for client-side decryption
+- Radix UI and shadcn/ui components
+- Zustand for state management
 
-## Prerequisites
+## 🛠️ Prerequisites
 
 - Node.js 18+ and pnpm
-- MetaMask or another Ethereum wallet browser extension
+- MetaMask or another Ethereum wallet
 - Access to Base Sepolia testnet
 - Chainlink Functions subscription
-- Chainlink DON ID
-- Inco Lightning Network
+- OKX API credentials for DEX integration
 
-## Getting Started
+## 📦 Installation
 
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/azhar0406/dgmarket.git
-   cd dgmarket
-   ```
-
-2. Install dependencies for all components:
-   ```bash
-   # Install frontend dependencies
-   cd frontend
-   pnpm install
-   cd ..
-   
-   # Install backend dependencies
-   cd backend
-   npm install
-   cd ..
-   
-   # Install contract dependencies
-   cd contracts
-   npm install
-   ```
-
-3. Create environment files:
-
-   **Frontend (.env.local in frontend directory):**
-   ```
-   NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
-   NEXT_PUBLIC_ENVIRONMENT=local # Options: local, testnet, mainnet
-   NEXT_PUBLIC_INCO_GATEWAY_URL=https://api.inco.org/api/v1
-   NEXT_PUBLIC_DGMARKET_CORE_ADDRESS=your_deployed_core_address
-   NEXT_PUBLIC_CHAINLINK_MANAGER_ADDRESS=your_deployed_manager_address
-   ```
-
-   **Backend (.env in backend directory):**
-   ```
-   PORT=3001
-   RPC_URL=https://base-sepolia-rpc.publicnode.com
-   PRIVATE_KEY=your_backend_wallet_private_key
-   CHAINLINK_MANAGER_ADDRESS=your_deployed_manager_address
-   DGMARKET_CORE_ADDRESS=your_deployed_core_address
-   GIFT_CARD_API_URL=http://localhost:8081
-   LOG_LEVEL=info
-   INCO_GATEWAY_URL=https://api.inco.org/api/v1
-   ```
-
-   **Contracts (.env in contracts directory):**
-   ```
-   PRIVATE_KEY_BASE_SEPOLIA=your_wallet_private_key
-   BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
-   CHAINLINK_SUBSCRIPTION_ID=your_chainlink_subscription_id
-   CHAINLINK_DON_ID=0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000
-   CHAINLINK_FUNCTIONS_ROUTER=0xf9B8fc078197181C841c296C876945aaa425B278
-   INCO_GATEWAY_URL=https://api.inco.org/api/v1
-   ETHERSCAN_API_KEY=your_etherscan_api_key
-   ```
-
-## Running the Application
-
-### Frontend
-
+### 1. Clone Repository
 ```bash
-cd frontend
-pnpm dev
+git clone https://github.com/azhar0406/dgmarket.git
+cd dgmarket
 ```
 
-The frontend will be available at [http://localhost:3000](http://localhost:3000).
-
-### Backend
-
+### 2. Install Dependencies
 ```bash
-cd backend
-npm run dev
+# Frontend dependencies
+cd frontend && pnpm install && cd ..
+
+# Backend dependencies  
+cd backend && npm install && cd ..
+
+# Contract dependencies
+cd contracts && npm install && cd ..
 ```
 
-The backend service will start on port 3001 (or as configured in .env).
+### 3. Environment Configuration
 
-## Smart Contract Deployment
-
-1. Navigate to the contracts directory:
-   ```bash
-   cd contracts
-   ```
-
-2. Deploy contracts using Hardhat Ignition:
-   ```bash
-   pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia
-   ```
-
-3. Run the complete setup script:
-   ```bash
-   node scripts/complete-master-setup.js
-   ```
-
-4. After deployment, update the contract addresses in:
-   - Frontend: `/frontend/constants/addresses.js`
-   - Backend: `.env` file
-
-## Project Structure
-
-```
-├── frontend/                  # Next.js frontend application
-│   ├── app/                   # Next.js app directory
-│   ├── components/            # Reusable React components
-│   ├── constants/             # Contract ABIs and addresses
-│   ├── hooks/                 # Custom React hooks
-│   └── utils/                 # Utility functions including incoEncryption.js
-│
-├── backend/                   # Node.js backend service
-│   ├── abis/                  # Contract ABIs for backend
-│   ├── controllers/           # API route controllers
-│   ├── services/              # Business logic services
-│   ├── utils/                 # Utility functions
-│   └── index.js               # Main entry point
-│
-└── contracts/                 # Solidity smart contracts
-    ├── contracts/             # Contract source files
-    │   ├── ChainlinkGiftCardManager.sol  # Automation-only restocking contract
-    │   └── DGMarketCore.sol              # Simplified core contract (FHE + Marketplace)
-    ├── scripts/               # Deployment and testing scripts
-    └── test/                  # Contract test files
+**Frontend (.env.local):**
+```env
+NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+NEXT_PUBLIC_DGMARKET_CORE_ADDRESS=your_deployed_core_address
+NEXT_PUBLIC_CHAINLINK_MANAGER_ADDRESS=your_deployed_manager_address
+NEXT_PUBLIC_INCO_GATEWAY_URL=https://api.inco.org/api/v1
+NEXT_PUBLIC_ENVIRONMENT=testnet
 ```
 
-## Smart Contract Architecture (Simplified)
+**Backend (.env):**
+```env
+PORT=8082
+BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+BASE_MAINNET_RPC_URL=https://base.llamarpc.com
+PRIVATE_KEY_BASE_SEPOLIA=your_private_key
+DGMARKET_CORE_SEPOLIA=your_deployed_core_address
 
-### 2-Contract System
+# OKX DEX API Configuration
+OKX_API_KEY=your_okx_api_key
+OKX_SECRET_KEY=your_okx_secret_key
+OKX_API_PASSPHRASE=your_okx_passphrase
+OKX_PROJECT_ID=your_okx_project_id
 
-#### DGMarketCore.sol - Simplified Core Contract
-- **State-Based Ownership**: Clean address-based gift card ownership tracking
-- **FHE Integration**: Encrypted gift card codes and values using Inco Lightning
-- **Marketplace Operations**: Listing, purchasing, and cancellation
-- **Resale Restrictions**: Prevents resale of revealed gift cards
-- **Multi-ERC20 Support**: Accept any ERC20 for payments
-- **Inventory Management**: Category-based tracking with automatic restock triggers
-- **Admin-Only Creation**: Role-based access control (ADMIN_ROLE, AUTOMATION_ROLE)
-- **Public Price Display**: Gift card prices are NOT encrypted for frontend browsing
-
-#### ChainlinkGiftCardManager.sol - Automation-Only Contract
-- **Chainlink Functions Integration**: Automated API calls for restocking
-- **Request Management**: Tracks pending/fulfilled restock requests
-- **No Inventory Storage**: All inventory managed by DGMarketCore
-- **Category Monitoring**: Batch checking and triggering for multiple categories
-- **Error Handling**: Comprehensive error management for API failures
-
-### Key Simplifications
-
-1. **No NFT Complexity**: Removed ERC721 inheritance for cleaner implementation
-2. **Sequential Card IDs**: Simple unique ID system (like order numbers)
-3. **Direct Ownership**: `mapping(address => uint256[])` for user's cards
-4. **Public Pricing**: Prices visible for browsing, only codes/values encrypted
-5. **Category Filtering**: Direct category-based card retrieval
-
-## Frontend Integration
-
-### Key View Functions
-
-```solidity
-// Get all available gift cards (public data only)
-getAllGiftCards() → GiftCardPublicData[]
-
-// Browse by category
-getGiftCardsByCategory(string category) → GiftCardPublicData[]
-
-// Get user's owned cards
-getMyGiftCards() → GiftCardPublicData[] // Uses msg.sender
-
-// Get marketplace listings
-getActiveListings() → Listing[]
+# Payment Processor
+SIMPLE_BRIDGE_MAINNET=your_bridge_contract_address
+ADMIN_ADDRESS=your_admin_address
+ADMIN_PRIVATE_KEY=your_admin_private_key
 ```
 
-### Frontend Usage Examples
-
-```javascript
-// Browse all available cards
-const allCards = await dgMarketContract.read.getAllGiftCards();
-
-// Browse by category
-const amazonCards = await dgMarketContract.read.getGiftCardsByCategory(["Amazon"]);
-
-// User's purchased cards dashboard
-const myCards = await dgMarketContract.read.getMyGiftCards();
-
-// Reveal gift card (only owner can do this)
-const encryptedCode = await dgMarketContract.write.revealGiftCard([cardId]);
-// Frontend decrypts using fhevmjs
+**Contracts (.env):**
+```env
+PRIVATE_KEY_BASE_SEPOLIA=your_wallet_private_key
+BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
+BASE_MAINNET_RPC_URL=https://base.llamarpc.com
+CHAINLINK_SUBSCRIPTION_ID=your_chainlink_subscription_id
+CHAINLINK_DON_ID=0x66756e2d626173652d7365706f6c69612d310000000000000000000000000000
+CHAINLINK_FUNCTIONS_ROUTER=0xf9B8fc078197181C841c296C876945aaa425B278
+ETHERSCAN_API_KEY=your_etherscan_api_key
 ```
 
-## Encryption Flow
+## 🚀 Quick Start
 
-### Gift Card Value Encryption (Simplified)
+### 1. Deploy Smart Contracts
+```bash
+cd contracts
+pnpm hardhat ignition deploy ./ignition/modules/DGMarketComplete.ts --network baseSepolia
+node scripts/complete-master-setup.js
+```
 
-1. **Admin/Automation Creation**: Gift card values are encrypted using Inco Lightning's FHE
-2. **On-Chain Storage**: Encrypted values stored as `euint256` in DGMarketCore
-3. **Public Price Display**: Prices are NOT encrypted, displayed directly on frontend
-4. **Access Control**: Only gift card owners can access their encrypted codes/values
-5. **Frontend Decryption**: Values decrypted client-side using fhevmjs SDK
-6. **Revelation Tracking**: Once revealed, cards cannot be resold
+### 2. Start Backend Services
+```bash
+# Gift card backend (port 8082)
+cd backend && npm start
+
+# Payment processor (port 3001)  
+cd backend && node payment-processor.js
+```
+
+### 3. Launch Frontend
+```bash
+cd frontend && pnpm dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000) to access DGMarket!
+
+## 🏛️ Smart Contract Architecture
+
+### **DGMarketCore.sol - The Heart of DGMarket**
+- **FHE Integration**: Encrypted gift card codes and PINs using Inco Lightning
+- **State-Based Ownership**: Clean address-based ownership tracking
+- **Public Pricing**: Prices visible for marketplace browsing
+- **Inventory Management**: Category-based tracking with auto-restock triggers
+- **Resale Protection**: Prevents resale of revealed gift cards
+
+### **ChainlinkGiftCardManager.sol - Automation Engine**
+- **Chainlink Functions**: Automated API calls for restocking
+- **Request Management**: Tracks pending/fulfilled restock operations
+- **Error Handling**: Comprehensive API failure management
+- **Category Monitoring**: Batch checking across all categories
+
+## 💰 Payment Flow with OKX DEX
 
 ```mermaid
 sequenceDiagram
-    participant Admin
-    participant DGMarketCore
     participant User
     participant Frontend
-    
-    Admin->>DGMarketCore: adminCreateGiftCard(encryptedCode, encryptedValue, publicPrice)
-    DGMarketCore->>DGMarketCore: Store with sequential cardId + update user mapping
-    User->>DGMarketCore: purchaseGiftCard(listingId)
-    DGMarketCore->>DGMarketCore: Transfer ownership via _transferOwnership()
-    User->>Frontend: Browse "My Cards"
-    Frontend->>DGMarketCore: getMyGiftCards()
-    DGMarketCore-->>Frontend: Return user's cards (public data)
-    User->>Frontend: Click "Reveal Card"
-    Frontend->>DGMarketCore: revealGiftCard(cardId)
-    DGMarketCore->>DGMarketCore: Mark as isRevealed[cardId] = true
-    DGMarketCore-->>Frontend: Return encrypted code
-    Frontend->>Frontend: Decrypt using fhevmjs
-    Frontend-->>User: Display decrypted code
-    Note over DGMarketCore: Gift card can no longer be resold
-```
-
-## Autonomous Stock Refilling System
-
-The system works with the simplified 2-contract architecture:
-
-1. **Inventory Monitoring**: DGMarketCore tracks inventory levels by category
-2. **Threshold Detection**: When inventory falls below threshold, `RestockTriggered` event is emitted
-3. **Chainlink Functions**: ChainlinkGiftCardManager calls external API via Chainlink Functions
-4. **Backend Processing**: Backend monitors events and creates encrypted gift cards
-5. **Card Creation**: New encrypted gift cards added via `automationCreateGiftCard()`
-
-```mermaid
-sequenceDiagram
-    participant User
+    participant PaymentProcessor
+    participant OKXDex
+    participant Bridge
     participant DGMarketCore
-    participant ChainlinkManager
-    participant ChainlinkFunctions
-    participant BackendAPI
     
-    User->>DGMarketCore: redeemGiftCard(cardId)
-    DGMarketCore->>DGMarketCore: Update category inventory
-    Note over DGMarketCore: Check if stock <= threshold
-    DGMarketCore->>DGMarketCore: Emit RestockTriggered event
-    ChainlinkManager->>ChainlinkFunctions: requestRestock(category)
-    ChainlinkFunctions->>BackendAPI: HTTP GET /api/restock?category=X
-    BackendAPI->>BackendAPI: Generate gift card data
-    BackendAPI-->>ChainlinkFunctions: Return gift card data
-    ChainlinkFunctions-->>ChainlinkManager: fulfillRequest(response)
-    ChainlinkManager->>DGMarketCore: automationCreateGiftCard(encryptedData)
-    DGMarketCore->>DGMarketCore: Create card + update inventory + user mappings
-    DGMarketCore-->>ChainlinkManager: Return cardId
+    User->>Frontend: Send ETH to purchase gift card
+    Frontend->>PaymentProcessor: Process ETH payment
+    PaymentProcessor->>OKXDex: Swap ETH → USDC at market rate
+    OKXDex-->>PaymentProcessor: Return USDC
+    PaymentProcessor->>Bridge: Emit cross-chain event
+    Bridge->>DGMarketCore: Purchase gift card on behalf of user
+    DGMarketCore->>DGMarketCore: Transfer encrypted gift card to user
+    DGMarketCore-->>User: Gift card delivered to wallet
 ```
 
-## Key Features Implementation
+## 🔐 Privacy & Security Features
 
-### Admin-Only Gift Card Creation
-```solidity
-// Only ADMIN_ROLE and AUTOMATION_ROLE can create gift cards
-function adminCreateGiftCard(...) external onlyRole(ADMIN_ROLE)
-function automationCreateGiftCard(...) external onlyRole(AUTOMATION_ROLE)
+### **Fully Homomorphic Encryption**
+- Gift card codes and PINs encrypted using Inco Lightning
+- Only card owners can decrypt their gift card details
+- All sensitive data remains encrypted on-chain
+
+### **Smart Contract Security**
+- Role-based access control (ADMIN_ROLE, AUTOMATION_ROLE)
+- Resale restrictions after gift card revelation
+- Comprehensive input validation and error handling
+
+### **Payment Security**
+- Cross-chain event verification
+- Automated gas management with dynamic pricing
+- Concurrent request protection
+
+## 🎮 Available Categories
+
+- **🎮 Gaming**: Google Play, League of Legends, Teamfight Tactics
+- **🍔 Food & Dining**: KFC, McDonald's, Zomato
+- **🛍️ Shopping**: Amazon Prime, Universal Vouchers, Premium Cards
+- **✈️ Travel**: Air India, Uber Rides
+- **🎬 Entertainment**: Premium subscriptions and access cards
+
+## 🔄 Automated Restocking System
+
+1. **Inventory Monitoring**: DGMarketCore tracks stock levels by category
+2. **Threshold Detection**: Auto-triggers when inventory falls below threshold
+3. **Chainlink Functions**: Calls external APIs for new gift card data
+4. **Backend Processing**: Creates encrypted gift cards with proper Inco encryption
+5. **Seamless Delivery**: New cards automatically added to marketplace
+
+## 🧪 Testing
+
+```bash
+# Test smart contracts
+cd contracts && pnpm hardhat test --network baseSepolia
+
+# Test backend APIs
+cd backend && npm test
+
+# Test payment processor
+cd backend && node test-payment-flow.js
 ```
 
-### Simplified Ownership Management
-```solidity
-// State-based ownership tracking
-mapping(address => uint256[]) public userGiftCards;
-mapping(string => uint256[]) public categoryCards;
+## 📁 Project Structure
 
-function _transferOwnership(uint256 cardId, address from, address to) internal {
-    giftCards[cardId].owner = to;
-    userGiftCards[to].push(cardId);
-    // Remove from old owner's list...
-}
+```
+dgmarket/
+├── frontend/                 # Next.js application
+│   ├── app/                  # App directory with pages
+│   ├── components/           # Reusable React components
+│   ├── hooks/                # Custom React hooks
+│   └── utils/                # Utility functions
+├── backend/                  # Node.js backend services
+│   ├── admin/                # Admin management tools
+│   ├── payment-processor.js  # OKX DEX integration
+│   └── index.js              # Main API server
+└── contracts/                # Smart contracts
+    ├── contracts/            # Solidity source files
+    ├── scripts/              # Deployment scripts
+    └── test/                 # Contract tests
 ```
 
-### Resale Restrictions
-```solidity
-// isRevealed tracking prevents resale after revelation
-mapping(uint256 => bool) public isRevealed;
-
-function listGiftCard(...) external {
-    if (giftCards[cardId].isRevealed) revert CardAlreadyRevealed(cardId);
-    // Create listing...
-}
-```
-
-### Public Price Display
-```solidity
-struct GiftCardPublicData {
-    uint256 cardId;
-    uint256 publicPrice;        // NOT encrypted - visible on frontend
-    address owner;
-    string category;
-    string description;
-    bool isRevealed;
-    // ... other public fields
-}
-```
-
-## Frontend Integration Examples
-
-### State-Based Ownership Checking
-```javascript
-// ✅ CORRECT: Use state-based ownership via getMyGiftCards
-const getUserCards = async () => {
-  const myCards = await dgMarketContract.read.getMyGiftCards();
-  return myCards.map(card => ({
-    id: card.cardId,
-    price: card.publicPrice,
-    revealed: card.isRevealed,
-    canReveal: !card.isRevealed,
-    canResell: !card.isRevealed
-  }));
-};
-
-// ✅ CORRECT: Check if user owns a specific card
-const checkCardOwnership = async (cardId) => {
-  const myCards = await dgMarketContract.read.getMyGiftCards();
-  const ownedCard = myCards.find(card => card.cardId.toString() === cardId.toString());
-  return ownedCard ? true : false;
-};
-```
-
-### Category-Based Browsing
-```javascript
-// ✅ CORRECT: Browse cards by category
-const browseByCategory = async (category) => {
-  const categoryCards = await dgMarketContract.read.getGiftCardsByCategory([category]);
-  return categoryCards.filter(card => card.isActive && !card.isRevealed);
-};
-```
-
-### Error Handling
-```javascript
-// ✅ CORRECT: Handle resale restriction errors
-const listCard = async (cardId, price) => {
-  try {
-    await dgMarketContract.write.listGiftCard([cardId, USDC_ADDRESS, price]);
-  } catch (error) {
-    if (error.message.includes("CardAlreadyRevealed")) {
-      throw new Error("Cannot resell revealed gift cards");
-    }
-    throw error;
-  }
-};
-```
-
-## Testing Examples
-
-### State-Based Ownership Tests
-```javascript
-// ✅ CORRECT: Test ownership using getMyGiftCards
-it("Should verify card ownership", async function () {
-  const myCards = await dgMarketContract.read.getMyGiftCards();
-  const ownedCard = myCards.find(card => card.cardId.toString() === cardId.toString());
-  expect(ownedCard).to.not.be.undefined;
-  expect(ownedCard.owner).to.equal(wallet.account.address);
-});
-```
-
-### Resale Restriction Tests
-```javascript
-// ✅ CORRECT: Test resale restrictions with correct error name
-it("Should prevent listing revealed cards", async function () {
-  await dgMarketContract.write.revealGiftCard([cardId]);
-  
-  try {
-    await dgMarketContract.write.listGiftCard([cardId, USDC_ADDRESS, parseEther("25")]);
-    expect.fail("Should have reverted");
-  } catch (error) {
-    expect(error.message).to.include("CardAlreadyRevealed");
-  }
-});
-```
-
-## Development Guidelines
-
-- Use React hooks for state management
-- Follow the container/presentational component pattern
-- Use Wagmi hooks for blockchain interactions
-- Implement proper error handling for all blockchain operations
-- Keep sensitive operations client-side with FHE encryption
-- Use state-based ownership checking via `getMyGiftCards()`
-- Respect resale restrictions for revealed gift cards
-- Use new view functions for efficient frontend integration
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit changes: `git commit -m 'Add my feature'`
-4. Push to branch: `git push origin feature/my-feature`
-5. Submit a pull request
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
-## License
+## 📜 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- **GitHub**: [https://github.com/azhar0406/dgmarket](https://github.com/azhar0406/dgmarket)
+- **Base Sepolia Explorer**: [https://sepolia.basescan.org](https://sepolia.basescan.org)
+- **Inco Lightning**: [https://docs.inco.org](https://docs.inco.org)
+- **Chainlink Functions**: [https://functions.chain.link](https://functions.chain.link)
+
+---
+
+**DGMarket eliminates the complexity of traditional gift card platforms by combining FHE privacy, automated operations, and user-friendly ETH payments. Users get instant access to encrypted gift cards while the platform maintains itself through intelligent automation, creating a truly decentralized and sustainable marketplace experience.** 🎯

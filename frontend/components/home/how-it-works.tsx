@@ -13,8 +13,8 @@ const steps = [
   },
   {
     step: '02',
-    title: 'Browse or Create',
-    description: 'Browse available gift cards or create your own with encrypted values for privacy.',
+    title: 'Browse',
+    description: 'Browse available gift cards with encrypted values for privacy.',
   },
   {
     step: '03',
