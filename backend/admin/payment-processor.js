@@ -26,7 +26,7 @@ const CONFIG = {
     ETH_ADDRESS: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
     
     GAS_LIMITS: {
-      purchaseOnBehalf: 600000,
+      purchaseOnBehalf: 1000000,
       okxSwap: 240000,
       bridgeEvent: 100000
     }

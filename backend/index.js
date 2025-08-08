@@ -614,16 +614,18 @@ app.get('/api/restock', async (req, res) => {
     });
     
     res.status(200).json({
-      success: successCount > 0,
-      category,
-      timestamp: Math.floor(Date.now() / 1000),
-      inventory: inventory,
-      cardsCreated: results,
-      encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
-      summary: {
-        attempted: results.length,
-        successful: successCount,
-        failed: results.length - successCount
+      success: successCount > 0,  // ✅ Single success field (operation result)
+      data: {
+        category,
+        timestamp: Math.floor(Date.now() / 1000),
+        inventory: inventory,
+        cardsCreated: results,
+        encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
+        summary: {
+          attempted: results.length,
+          successful: successCount,
+          failed: results.length - successCount
+        }
       }
     });
     

@@ -3,11 +3,12 @@
 
 // Import contract addresses from automated loader
 export { 
-  CONTRACT_ADDRESSES,
   DGMARKET_CORE_ADDRESS,
   CHAINLINK_MANAGER_ADDRESS,
   NETWORK_CONFIG 
 } from './contract-addresses';
+
+import { CONTRACT_ADDRESSES } from './contract-addresses';
 
 // Network Configuration for Cross-Chain
 export const NETWORK_CONFIG_CROSS_CHAIN = {
@@ -17,12 +18,12 @@ export const NETWORK_CONFIG_CROSS_CHAIN = {
     rpcUrl: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://base-sepolia-rpc.publicnode.com',
     blockExplorer: process.env.NEXT_PUBLIC_SEPOLIA_BLOCK_EXPLORER || 'https://sepolia.basescan.org',
     contracts: {
-      DGMARKET_CORE: process.env.NEXT_PUBLIC_DGMARKET_CORE_ADDRESS || '0xEC4FEaB311632177CaAc3291cbDCFd1C438E29aE',
-      CHAINLINK_MANAGER: process.env.NEXT_PUBLIC_CHAINLINK_MANAGER_ADDRESS || '0x',
+      DGMARKET_CORE: CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`,
+      CHAINLINK_MANAGER: CONTRACT_ADDRESSES.CHAINLINK_GIFT_CARD_MANAGER as `0x${string}`,
     },
     tokens: {
-      USDC: process.env.NEXT_PUBLIC_SEPOLIA_USDC_ADDRESS || '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-      WETH: '0x4200000000000000000000000000000000000006',
+      USDC: CONTRACT_ADDRESSES.USDC_ADDRESS,
+      WETH: CONTRACT_ADDRESSES.WETH_ADDRESS,
     }
   },
   BASE_MAINNET: {

@@ -609,6 +609,12 @@ async function updateEnvFiles() {
       envContent = envContent.replace(/DGMARKET_CORE_SEPOLIA=".*"/g, `DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
       
       fs.writeFileSync(backendEnvPath, envContent);
+
+      const backendEnvPath2 = path.join(__dirname, '../../backend/admin/.env');
+      let envContent2 = fs.readFileSync(backendEnvPath2, 'utf8');
+      envContent2 = envContent2.replace(/DGMARKET_CORE_SEPOLIA=".*"/g, `DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
+
+      fs.writeFileSync(backendEnvPath2, envContent2);
       
       console.log('✅ Backend .env file updated successfully:');
       console.log(`  CHAINLINK_MANAGER_ADDRESS="${contractAddresses.chainlinkGiftCardManager}"`);
