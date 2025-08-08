@@ -16,7 +16,7 @@ const CONFIG = {
     BASE_SEPOLIA_RPC: process.env.BASE_SEPOLIA_RPC || 'https://base-sepolia.api.onfinality.io/public',
     
     DGMARKET_CORE_SEPOLIA: process.env.DGMARKET_CORE_SEPOLIA,
-    SIMPLE_BRIDGE_MAINNET: process.env.SIMPLE_BRIDGE_MAINNE,
+    SIMPLE_BRIDGE_MAINNET: process.env.SIMPLE_BRIDGE_MAINNET,
     ADMIN_ADDRESS: process.env.ADMIN_ADDRESS,
     ADMIN_PRIVATE_KEY: process.env.ADMIN_PRIVATE_KEY,
     
