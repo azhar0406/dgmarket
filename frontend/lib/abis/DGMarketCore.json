@@ -348,6 +348,25 @@
     "inputs": [
       {
         "indexed": false,
+        "internalType": "string",
+        "name": "category",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RestockRequestCleared",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "amount",
         "type": "uint256"
@@ -1450,6 +1469,25 @@
         "internalType": "bool",
         "name": "",
         "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "name": "pendingRestockRequests",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",

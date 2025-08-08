@@ -15,9 +15,9 @@ const CONFIG = {
     BASE_MAINNET_RPC: process.env.BASE_MAINNET_RPC || 'https://base.llamarpc.com',
     BASE_SEPOLIA_RPC: process.env.BASE_SEPOLIA_RPC || 'https://base-sepolia.api.onfinality.io/public',
     
-    DGMARKET_CORE_SEPOLIA: '0xd9F2A41902524d20F12B3f2784d2F0962E0090cE',
-    SIMPLE_BRIDGE_MAINNET: '0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba',
-    ADMIN_ADDRESS: '0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09',
+    DGMARKET_CORE_SEPOLIA: process.env.DGMARKET_CORE_SEPOLIA,
+    SIMPLE_BRIDGE_MAINNET: process.env.SIMPLE_BRIDGE_MAINNE,
+    ADMIN_ADDRESS: process.env.ADMIN_ADDRESS,
     ADMIN_PRIVATE_KEY: process.env.ADMIN_PRIVATE_KEY,
     
     // OKX settings - EXACT same as debug script
@@ -26,7 +26,7 @@ const CONFIG = {
     ETH_ADDRESS: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
     
     GAS_LIMITS: {
-      purchaseOnBehalf: 300000,
+      purchaseOnBehalf: 600000,
       okxSwap: 240000,
       bridgeEvent: 100000
     }
@@ -190,7 +190,6 @@ class WorkingPaymentProcessor {
     }
   }
 
-  // Execute OKX swap - FIXED: Remove targetUSDC parameter
   async executeOKXSwap(ethAmount) {
     console.log(`🔄 OKX DEX Swap: ${ethAmount} ETH → USDC (market rate)`);
     
@@ -198,13 +197,27 @@ class WorkingPaymentProcessor {
       const ethAmountWei = ethers.parseEther(ethAmount).toString();
       console.log(`💱 ETH Amount in wei: ${ethAmountWei}`);
       
-      // Step 1: Get quote - EXACT same as debug script
+      // Step 1: Get quote with retry logic
       console.log('📞 Getting OKX DEX quote...');
-      const quote = await this.getOKXQuote(ethAmountWei);
+      let quote;
+      let attempts = 0;
+      const maxAttempts = 3;
       
-      // Parse response EXACT same as debug script
-      const expectedUSDC = parseFloat(quote.toTokenAmount) / 1e6; // USDC has 6 decimals
-      const inputETH = parseFloat(quote.fromTokenAmount) / 1e18; // ETH has 18 decimals
+      while (attempts < maxAttempts) {
+        try {
+          quote = await this.getOKXQuote(ethAmountWei);
+          break;
+        } catch (error) {
+          attempts++;
+          console.log(`⚠️ Quote attempt ${attempts} failed:`, error.message);
+          if (attempts >= maxAttempts) throw error;
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s between retries
+        }
+      }
+      
+      // Parse response
+      const expectedUSDC = parseFloat(quote.toTokenAmount) / 1e6;
+      const inputETH = parseFloat(quote.fromTokenAmount) / 1e18;
       const ethPrice = expectedUSDC / inputETH;
       
       console.log(`💱 OKX Quote:`);
@@ -217,38 +230,76 @@ class WorkingPaymentProcessor {
         throw new Error(`Output too small: ${expectedUSDC.toFixed(6)} USDC`);
       }
       
-      // Step 2: Get swap transaction
-      console.log('🔧 Getting OKX swap transaction...');
-      const swapData = await this.getOKXSwapTransaction(ethAmountWei);
+      // Step 2: Try swap with increasing slippage if it fails
+      const slippageOptions = ['0.01', '0.02', '0.03']; // 1%, 2%, 3%
+      let swapResult = null;
+      let lastError = null;
       
-      if (!swapData.tx) {
-        throw new Error('Invalid swap data - missing transaction object');
+      for (const slippage of slippageOptions) {
+        try {
+          console.log(`🔧 Attempting swap with ${parseFloat(slippage) * 100}% slippage...`);
+          
+          // Get swap transaction with current slippage
+          const swapData = await this.getOKXSwapTransaction(ethAmountWei, slippage);
+          
+          if (!swapData.tx) {
+            throw new Error('Invalid swap data - missing transaction object');
+          }
+          
+          // Calculate gas limit with buffer
+          let gasLimit = CONFIG.GAS_LIMITS.okxSwap; // Default fallback
+          if (swapData.tx.gasLimit) {
+            gasLimit = Math.floor(parseInt(swapData.tx.gasLimit) * 1.2); // 20% buffer
+          } else if (swapData.tx.gas) {
+            gasLimit = Math.floor(parseInt(swapData.tx.gas) * 1.2);
+          }
+          
+          console.log(`⛽ Using gas limit: ${gasLimit} (slippage: ${parseFloat(slippage) * 100}%)`);
+          
+          // Execute swap
+          const swapTx = await this.adminMainnetSigner.sendTransaction({
+            to: swapData.tx.to,
+            value: swapData.tx.value || 0,
+            data: swapData.tx.data,
+            gasLimit: gasLimit,
+          });
+          
+          console.log(`📡 OKX Swap TX sent: ${swapTx.hash} (slippage: ${parseFloat(slippage) * 100}%)`);
+          const swapReceipt = await swapTx.wait();
+          
+          if (swapReceipt.status === 1) {
+            console.log(`✅ OKX DEX swap successful with ${parseFloat(slippage) * 100}% slippage`);
+            swapResult = {
+              success: true,
+              txHash: swapTx.hash,
+              ethUsed: ethAmount,
+              usdcReceived: expectedUSDC.toFixed(6),
+              ethPrice: ethPrice.toFixed(2),
+              slippageUsed: slippage
+            };
+            break; // Success! Exit the loop
+          } else {
+            throw new Error(`Swap transaction failed with status ${swapReceipt.status}`);
+          }
+          
+        } catch (error) {
+          lastError = error;
+          console.error(`❌ Swap failed with ${parseFloat(slippage) * 100}% slippage:`, error.message);
+          
+          // If this isn't the last attempt, continue to next slippage
+          if (slippage !== slippageOptions[slippageOptions.length - 1]) {
+            console.log(`🔄 Retrying with higher slippage...`);
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s between attempts
+          }
+        }
       }
       
-      // Step 3: Execute swap
-      console.log('⚡ Executing OKX DEX swap on Base Mainnet...');
-      const swapTx = await this.adminMainnetSigner.sendTransaction({
-        to: swapData.tx.to,
-        value: swapData.tx.value || 0,
-        data: swapData.tx.data,
-        gasLimit: CONFIG.GAS_LIMITS.okxSwap,
-      });
-      
-      console.log(`📡 OKX Swap TX sent: ${swapTx.hash}`);
-      const swapReceipt = await swapTx.wait();
-      
-      if (swapReceipt.status === 1) {
-        console.log(`✅ OKX DEX swap successful: ${expectedUSDC.toFixed(6)} USDC received`);
-        return {
-          success: true,
-          txHash: swapTx.hash,
-          ethUsed: ethAmount,
-          usdcReceived: expectedUSDC.toFixed(6),
-          ethPrice: ethPrice.toFixed(2)
-        };
-      } else {
-        throw new Error('OKX swap transaction failed');
+      // If all slippage attempts failed
+      if (!swapResult) {
+        throw new Error(`All swap attempts failed. Last error: ${lastError?.message || 'Unknown error'}`);
       }
+      
+      return swapResult;
       
     } catch (error) {
       console.error('❌ OKX DEX swap error:', error);
@@ -257,6 +308,61 @@ class WorkingPaymentProcessor {
       }
       return { success: false, error: error.message };
     }
+  }
+  
+  // FIXED: Get OKX swap transaction with configurable slippage
+  async getOKXSwapTransaction(ethAmountWei, slippage = '0.01') {
+    const timestamp = new Date().toISOString();
+    const requestPath = '/api/v5/dex/aggregator/swap';
+    
+    const params = {
+      chainIndex: CONFIG.OKX_CHAIN_ID,
+      fromTokenAddress: CONFIG.ETH_ADDRESS,
+      toTokenAddress: CONFIG.USDC_BASE,
+      amount: ethAmountWei,
+      userWalletAddress: CONFIG.ADMIN_ADDRESS,
+      slippage: slippage // Now configurable!
+    };
+    
+    const queryString = "?" + new URLSearchParams(params).toString();
+    const headers = this.getOKXHeaders(timestamp, 'GET', requestPath, queryString);
+    
+    console.log(`📊 Requesting OKX swap with ${parseFloat(slippage) * 100}% slippage`);
+    
+    const response = await axios.get(`https://web3.okx.com${requestPath}`, { 
+      params, 
+      headers,
+      timeout: 15000 // Increased timeout
+    });
+    
+    console.log('📊 OKX Swap Response Code:', response.data.code);
+    
+    if (response.data.code === '0') {
+      return response.data.data[0];
+    } else {
+      throw new Error(`OKX Swap API Error: ${response.data.msg || 'Unknown error'}`);
+    }
+  }
+  
+  // ADDITIONAL: Add this method to handle small ETH amounts better
+  validateSwapAmount(ethAmount) {
+    const ethValue = parseFloat(ethAmount);
+    
+    // Minimum viable swap amount (roughly $1 worth)
+    const minETH = 0.0003; // About $1 at $3600/ETH
+    
+    if (ethValue < minETH) {
+      throw new Error(`ETH amount too small for swap: ${ethAmount} ETH (minimum: ${minETH} ETH)`);
+    }
+    
+    // Maximum reasonable amount for this use case
+    const maxETH = 1.0; // 1 ETH max
+    
+    if (ethValue > maxETH) {
+      throw new Error(`ETH amount too large: ${ethAmount} ETH (maximum: ${maxETH} ETH)`);
+    }
+    
+    return true;
   }
 
   // Get OKX quote - EXACT same as debug script

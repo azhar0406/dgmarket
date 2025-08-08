@@ -598,7 +598,7 @@
             "type": "bool"
           }
         ],
-        "internalType": "struct ChainlinkGiftCardManager.RestockRequest",
+        "internalType": "struct RestockRequest",
         "name": "",
         "type": "tuple"
       }

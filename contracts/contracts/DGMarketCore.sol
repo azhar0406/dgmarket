@@ -97,6 +97,7 @@ struct GiftCardWithEncryption {
     euint256 encryptedPin;   // 0x0 if not revealed
 }
 
+
     // =============================================================================
     // STATE VARIABLES (OPTIMIZED STORAGE)
     // =============================================================================
@@ -111,6 +112,7 @@ struct GiftCardWithEncryption {
     mapping(address => uint256[]) public userGiftCards; 
     mapping(string => uint256[]) public categoryCards;  
     mapping(string => CategoryInventory) public categoryInventory;
+    mapping(string => bytes32) public pendingRestockRequests;
     
     // Counters
     uint256 private nextCardId = 1;
@@ -144,6 +146,7 @@ struct GiftCardWithEncryption {
     
     event TokenWithdrawn(address indexed token, address indexed to, uint256 amount);
     event RevenueCollected(uint256 amount, uint256 fees);
+    event RestockRequestCleared(string category, bytes32 requestId);
 
     // =============================================================================
     // CUSTOM ERRORS
@@ -189,6 +192,7 @@ struct GiftCardWithEncryption {
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(AUTOMATION_ROLE, msg.sender);
         
         // Initialize default categories
         _initializeCategories();
@@ -907,20 +911,42 @@ function getAllCategoriesWithData() external view returns (
     /**
      * @dev Check inventory and trigger automatic restocking if needed
      */
-    function _checkAndTriggerAutoRestock(string memory category) internal {
-        if (!autoRestockEnabled || chainlinkManager == address(0)) {
+function _checkAndTriggerAutoRestock(string memory category) internal {
+    // ✅ Check if request already pending
+    bytes32 pendingRequestId = pendingRestockRequests[category];
+    
+    if (pendingRequestId != bytes32(0)) {
+        // ✅ AUTO-CHECK: Use existing getRequest function
+        try IChainlinkManager(chainlinkManager).getRequest(pendingRequestId) returns (RestockRequest memory request) {
+            if (request.fulfilled) {
+                // Request completed, clear it and continue
+                pendingRestockRequests[category] = bytes32(0);
+                emit RestockRequestCleared(category, pendingRequestId);
+            } else {
+                // Still pending, skip to avoid duplicates
+                return;
+            }
+        } catch {
+            // If query fails, assume still pending to be safe
             return;
         }
-        
-        CategoryInventory storage inventory = categoryInventory[category];
-        if (inventory.active && inventory.count <= inventory.threshold) {
-            try IChainlinkManager(chainlinkManager).triggerRestock(category) {
-                emit AutoRestockTriggered(category, inventory.count, inventory.threshold);
-            } catch {
-                // Silently fail to avoid reverting the main transaction
-            }
+    }
+    
+    // Normal restock logic continues...
+    if (!autoRestockEnabled || chainlinkManager == address(0)) {
+        return;
+    }
+    
+    CategoryInventory storage inventory = categoryInventory[category];
+    if (inventory.active && inventory.count <= inventory.threshold) {
+        try IChainlinkManager(chainlinkManager).triggerRestock(category) returns (bytes32 requestId) {
+            pendingRestockRequests[category] = requestId;
+            emit AutoRestockTriggered(category, inventory.count, inventory.threshold);
+        } catch {
+            // Silently fail
         }
     }
+}
     
     /**
      * @dev Pause contract
@@ -936,8 +962,15 @@ function getAllCategoriesWithData() external view returns (
         _unpause();
     }
 }
+struct RestockRequest {
+    bytes32 requestId;
+    string category;
+    uint256 timestamp;
+    bool fulfilled;
+}
 
 // Interface for ChainlinkGiftCardManager
 interface IChainlinkManager {
     function triggerRestock(string calldata category) external returns (bytes32 requestId);
+    function getRequest(bytes32 requestId) external view returns (RestockRequest memory request);
 }

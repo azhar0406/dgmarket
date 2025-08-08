@@ -116,7 +116,7 @@ const REAL_GIFT_CARD_PORTFOLIO = [
   {
     code: "AIR-INDIA-FLIGHT-2025",
     pin: "5501",
-    publicPrice: parseUnits("2", 6), // 2 USDC
+    publicPrice: parseUnits("0.02", 6), // 2 USDC
     category: "Travel",
     description: "Air India Flight Credit",
     imageUrl: `${IPFS_BASE}air_india.png`

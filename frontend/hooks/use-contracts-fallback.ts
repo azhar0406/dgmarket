@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { formatEther, parseEther, type Address } from 'viem';
-import { CONTRACT_ADDRESSES, GIFT_CARD_CATEGORIES } from '@/lib/constants';
+import {  GIFT_CARD_CATEGORIES } from '@/lib/constants';
 
 // Mock data for testing
 const MOCK_GIFT_CARDS = [
@@ -243,4 +243,4 @@ export const formatPrice = (price: bigint) => formatEther(price);
 export const parsePrice = (price: string) => parseEther(price);
 
 // Export contract addresses
-export { CONTRACT_ADDRESSES };
+// export { CONTRACT_ADDRESSES };

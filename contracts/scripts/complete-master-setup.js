@@ -594,7 +594,7 @@ async function updateEnvFiles() {
       
       // Update contract addresses for 2-contract + bridge system
       envContent = envContent.replace(/CHAINLINK_MANAGER_ADDRESS=".*"/g, `CHAINLINK_MANAGER_ADDRESS="${contractAddresses.chainlinkGiftCardManager}"`);
-      envContent = envContent.replace(/DGMARKET_CORE_ADDRESS=".*"/g, `DGMARKET_CORE_ADDRESS="${contractAddresses.dgMarketCore}"`);
+      // envContent = envContent.replace(/DGMARKET_CORE_ADDRESS=".*"/g, `DGMARKET_CORE_ADDRESS="${contractAddresses.dgMarketCore}"`);
       
       // Add SimpleBridge address
       if (contractAddresses.simpleBridge) {
@@ -606,7 +606,7 @@ async function updateEnvFiles() {
       }
       
       // Legacy compatibility
-      envContent = envContent.replace(/GIFT_CARD_ADDRESS=".*"/g, `GIFT_CARD_ADDRESS="${contractAddresses.dgMarketCore}"`);
+      envContent = envContent.replace(/DGMARKET_CORE_SEPOLIA=".*"/g, `DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
       
       fs.writeFileSync(backendEnvPath, envContent);
       

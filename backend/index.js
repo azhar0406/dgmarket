@@ -42,6 +42,12 @@ const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL;
 const PRIVATE_KEY = process.env.PRIVATE_KEY_BASE_SEPOLIA;
 const DGMARKET_CORE_ADDRESS = process.env.DGMARKET_CORE_SEPOLIA;
 
+// If ANY of these are missing, it fails:
+if (!RPC_URL || !PRIVATE_KEY || !DGMARKET_CORE_ADDRESS) {
+  logger.warn('Blockchain credentials not provided, running in API-only mode');
+  return false;
+}
+
 // IPFS base URL for images
 const IPFS_BASE = "https://fuchsia-total-catshark-247.mypinata.cloud/ipfs/bafybeiasqs7q3uuahrz7o44l46d73fmerfqt2ypjscnc5zhwwu6ug77gq4/";
 
@@ -186,7 +192,7 @@ async function initBlockchain() {
       return false;
     }
     
-    provider = new ethers.JsonRpcProvider(RPC_URL);
+    provider = new ethers.providers.JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIVATE_KEY, provider);
     
     // Simple ABI for the functions we need
@@ -366,8 +372,6 @@ async function createGiftCardOnChain(cardData, category) {
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
       encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
-      originalCode: cardData.code, // For logging only
-      originalPin: cardData.pin    // For logging only
     };
   } catch (error) {
     logger.error('Failed to create gift card on chain', {

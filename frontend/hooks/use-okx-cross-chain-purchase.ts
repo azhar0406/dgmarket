@@ -8,11 +8,14 @@ import { useAccount, useSendTransaction, useSwitchChain, usePublicClient } from 
 import { parseEther, formatEther } from 'viem';
 import { baseSepolia, base } from 'viem/chains';
 import { toast } from 'sonner';
+import { CONTRACT_ADDRESSES } from '../lib/contract-addresses';
 
+const CONTRACT_ADDRESS = CONTRACT_ADDRESSES.DGMARKET_CORE as `0x${string}`;
+const CHAINLINK_MANAGER_ADDRESS = CONTRACT_ADDRESSES.CHAINLINK_GIFT_CARD_MANAGER as `0x${string}`;
 // Contract addresses from your deployment
 const CONTRACTS = {
-  DGMARKET_CORE_SEPOLIA: '0xd9F2A41902524d20F12B3f2784d2F0962E0090cE',
-  SIMPLE_BRIDGE_MAINNET: '0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba',
+  DGMARKET_CORE_SEPOLIA: CONTRACT_ADDRESS,
+  CHAINLINK_MANAGER_ADDRESS: CHAINLINK_MANAGER_ADDRESS,
   ADMIN_ADDRESS: '0x6328d8Ad7A88526e35c9Dc730e65fF8fEE971c09' // Update with your admin address
 };
 
