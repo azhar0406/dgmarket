@@ -48,6 +48,9 @@ if (!RPC_URL || !PRIVATE_KEY || !DGMARKET_CORE_ADDRESS) {
   return false;
 }
 
+// ✅ FIX 1: Add concurrent request protection
+const activeRestockRequests = new Set();
+
 // IPFS base URL for images
 const IPFS_BASE = "https://fuchsia-total-catshark-247.mypinata.cloud/ipfs/bafybeiasqs7q3uuahrz7o44l46d73fmerfqt2ypjscnc5zhwwu6ug77gq4/";
 
@@ -317,8 +320,8 @@ function getRandomCardsFromCategory(category, count = 2) {
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-// ✅ FIXED: Create gift card on blockchain with PROPER Inco encryption
-async function createGiftCardOnChain(cardData, category) {
+// ✅ FIX 2: Enhanced gift card creation with gas management and nonce handling
+async function createGiftCardOnChain(cardData, category, nonce = null) {
   try {
     if (!dgMarketContract) {
       throw new Error('Blockchain not connected');
@@ -330,6 +333,7 @@ async function createGiftCardOnChain(cardData, category) {
       code: cardData.code, // Show plain text in logs for debugging
       pin: cardData.pin,
       price: cardData.publicPrice,
+      nonce: nonce || 'auto',
       encryption: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
     });
     
@@ -346,7 +350,30 @@ async function createGiftCardOnChain(cardData, category) {
       encryptedPinPreview: encryptedPinInput.substring(0, 20) + '...'
     });
     
-    // ✅ Call contract with ENCRYPTED values (not plain text)
+    // ✅ FIX 2: Better gas management and nonce handling
+    const txOptions = {
+      gasLimit: 1000000,  // Explicit gas limit
+    };
+    
+    // Add nonce if provided
+    if (nonce !== null) {
+      txOptions.nonce = nonce;
+    } else {
+      // Get pending nonce to avoid collisions
+      txOptions.nonce = await wallet.getTransactionCount('pending');
+    }
+    
+    // Get current gas price with buffer
+    const currentGasPrice = await provider.getGasPrice();
+    txOptions.gasPrice = currentGasPrice.mul(120).div(100); // 20% buffer
+    
+    logger.info('Transaction options', {
+      gasLimit: txOptions.gasLimit,
+      gasPrice: ethers.utils.formatUnits(txOptions.gasPrice, 'gwei') + ' gwei',
+      nonce: txOptions.nonce
+    });
+    
+    // ✅ Call contract with ENCRYPTED values and better gas management
     const tx = await dgMarketContract.automationCreateGiftCard(
       encryptedCodeInput,   // ✅ Already encrypted
       encryptedPinInput,    // ✅ Already encrypted
@@ -354,7 +381,8 @@ async function createGiftCardOnChain(cardData, category) {
       cardData.description,
       category,
       cardData.imageUrl,
-      0 // No expiry date
+      0, // No expiry date
+      txOptions
     );
     
     const receipt = await tx.wait();
@@ -363,6 +391,7 @@ async function createGiftCardOnChain(cardData, category) {
       blockNumber: receipt.blockNumber,
       category,
       gasUsed: receipt.gasUsed?.toString(),
+      nonce: txOptions.nonce,
       encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
     });
     
@@ -371,6 +400,7 @@ async function createGiftCardOnChain(cardData, category) {
       txHash: tx.hash, 
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed?.toString(),
+      nonce: txOptions.nonce,
       encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
     };
   } catch (error) {
@@ -378,7 +408,8 @@ async function createGiftCardOnChain(cardData, category) {
       error: error.message,
       category,
       code: cardData.code,
-      pin: cardData.pin
+      pin: cardData.pin,
+      nonce: nonce
     });
     return { success: false, error: error.message };
   }
@@ -419,7 +450,9 @@ app.get('/', (req, res) => {
       'Fallback encryption mode',
       'Blockchain integration',
       'Auto inventory management',
-      'Category-based restocking'
+      'Category-based restocking',
+      'Concurrent request protection',
+      'Enhanced gas management'
     ],
     categories: Object.keys(REAL_GIFT_CARD_PORTFOLIO),
     encryption: zap && typeof zap.encrypt === 'function' ? 'Inco SDK Ready' : 'Fallback Mode',
@@ -438,7 +471,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'DG Market Backend',
-    version: '4.0 - Complete with Inco Integration',
+    version: '4.1 - Complete with All Fixes',
     blockchain: {
       connected: !!(provider && wallet),
       contractAddress: DGMARKET_CORE_ADDRESS || 'not configured'
@@ -452,6 +485,10 @@ app.get('/health', (req, res) => {
       totalCategories: Object.keys(REAL_GIFT_CARD_PORTFOLIO).length,
       totalCards: Object.values(REAL_GIFT_CARD_PORTFOLIO).reduce((sum, cards) => sum + cards.length, 0),
       priceRange: '0.01 - 2 USDC'
+    },
+    concurrency: {
+      activeRequests: activeRestockRequests.size,
+      activeCategories: Array.from(activeRestockRequests)
     }
   });
 });
@@ -518,7 +555,7 @@ app.post('/api/test-encryption', async (req, res) => {
   }
 });
 
-// Main restock API endpoint
+// ✅ FIX 1 & 3: Enhanced restock API with concurrent protection and improved response
 app.get('/api/restock', async (req, res) => {
   try {
     const { category } = req.query;
@@ -537,96 +574,153 @@ app.get('/api/restock', async (req, res) => {
       });
     }
     
-    logger.info('Restock request received', { category });
-    
-    // Check current inventory
-    const inventory = await checkCategoryInventory(category);
-    logger.info('Current inventory', { category, inventory });
-    
-    // Get cards to restock (usually 2-3 cards)
-    const cardsToCreate = getRandomCardsFromCategory(category, 2);
-    
-    if (cardsToCreate.length === 0) {
-      return res.status(404).json({
-        error: 'No cards available for this category',
-        category
+    // ✅ FIX 1: Check for concurrent requests
+    if (activeRestockRequests.has(category)) {
+      logger.info('Concurrent restock request detected', { category });
+      return res.status(200).json({
+        success: true,  // ✅ FIX 3: Always return success for API calls
+        data: {
+          message: 'Restock already in progress for this category',
+          category,
+          cardsCreated: [],
+          summary: {
+            attempted: 0,
+            successful: 0,
+            failed: 0,
+            reason: 'concurrent_request'
+          }
+        }
       });
     }
     
-    const results = [];
+    // Mark category as being processed
+    activeRestockRequests.add(category);
     
-    // Create each card on the blockchain with proper encryption
-    for (const cardData of cardsToCreate) {
-      try {
-        logger.info('Creating card with proper Inco encryption', {
-          description: cardData.description,
-          originalCode: cardData.code,      // ✅ Show what we're encrypting
-          originalPin: cardData.pin,        // ✅ Show what we're encrypting
-          price: `${formatUSDCUnits(cardData.publicPrice)} USDC`, // ✅ Use viem formatUnits
-          encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
-        });
-        
-        // ✅ CRITICAL: Get encrypted values BEFORE contract call
-        const encryptedCodeInput = await encryptWithIncoSDK(cardData.code, 'string');
-        const encryptedPinInput = await encryptWithIncoSDK(cardData.pin, 'pin');
-        
-        logger.info('Pre-contract encryption verification', {
-          codeEncrypted: encryptedCodeInput.substring(0, 30) + '...',
-          pinEncrypted: encryptedPinInput.substring(0, 30) + '...',
-          codeLength: encryptedCodeInput.length,
-          pinLength: encryptedPinInput.length
-        });
-        
-        const result = await createGiftCardOnChain(cardData, category);
-        results.push({
-          description: cardData.description,
-          originalCode: cardData.code,      // ✅ Keep for logging
-          originalPin: cardData.pin,        // ✅ Keep for logging
-          priceInUSDC: parseFloat(formatUSDCUnits(cardData.publicPrice)), // ✅ Use viem formatUnits
-          category: category,
-          blockchainResult: result
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-       
-        
-      } catch (error) {
-        logger.error('Failed to create individual card', {
-          error: error.message,
-          cardDescription: cardData.description
-        });
-        results.push({
-          ...cardData,
-          blockchainResult: { success: false, error: error.message }
+    try {
+      logger.info('Restock request received', { category });
+      
+      // Check current inventory
+      const inventory = await checkCategoryInventory(category);
+      logger.info('Current inventory', { category, inventory });
+      
+      // Get exactly 2 cards to restock (consistent count)
+      const cardsToCreate = getRandomCardsFromCategory(category, 2);
+      
+      if (cardsToCreate.length === 0) {
+        return res.status(200).json({
+          success: true,  // ✅ FIX 3: API call succeeded
+          data: {
+            message: 'No cards available for this category',
+            category,
+            cardsCreated: [],
+            summary: {
+              attempted: 0,
+              successful: 0,
+              failed: 0,
+              reason: 'no_cards_available'
+            }
+          }
         });
       }
-    }
-    
-    const successCount = results.filter(r => r.blockchainResult.success).length;
-    
-    logger.info('Restock completed', {
-      category,
-      attempted: results.length,
-      successful: successCount,
-      encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
-    });
-    
-    res.status(200).json({
-      success: true,  // ✅ API call always succeeds
-      data: {
-        operationSuccess: successCount > 0,  // ✅ Separate field for operation result
-        category,
-        cardsCreated: results,
-        summary: {
-          attempted: results.length,
-          successful: successCount,
-          failed: results.length - successCount
+      
+      const results = [];
+      
+      // ✅ FIX 2: Sequential processing with proper nonce management
+      let currentNonce = await wallet.getTransactionCount('pending');
+      
+      for (let i = 0; i < cardsToCreate.length; i++) {
+        const cardData = cardsToCreate[i];
+        
+        try {
+          logger.info('Creating card with proper Inco encryption', {
+            description: cardData.description,
+            originalCode: cardData.code,      
+            originalPin: cardData.pin,        
+            price: `${formatUSDCUnits(cardData.publicPrice)} USDC`,
+            nonce: currentNonce,
+            encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
+          });
+          
+          // Create gift card with specific nonce
+          const result = await createGiftCardOnChain(cardData, category, currentNonce);
+          results.push({
+            description: cardData.description,
+            originalCode: cardData.code,      
+            originalPin: cardData.pin,        
+            priceInUSDC: parseFloat(formatUSDCUnits(cardData.publicPrice)),
+            category: category,
+            blockchainResult: result
+          });
+          
+          // Increment nonce for next transaction
+          currentNonce++;
+          
+          // ✅ FIX 2: Wait between transactions (3 seconds instead of 2)
+          if (i < cardsToCreate.length - 1) {
+            logger.info('Waiting before next card creation...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+          
+        } catch (error) {
+          logger.error('Failed to create individual card', {
+            error: error.message,
+            cardDescription: cardData.description,
+            nonce: currentNonce
+          });
+          results.push({
+            description: cardData.description,
+            originalCode: cardData.code,
+            originalPin: cardData.pin,
+            priceInUSDC: parseFloat(formatUSDCUnits(cardData.publicPrice)),
+            category: category,
+            blockchainResult: { success: false, error: error.message }
+          });
+          
+          // Still increment nonce even on failure
+          currentNonce++;
         }
       }
-    });
+      
+      const successCount = results.filter(r => r.blockchainResult.success).length;
+      
+      logger.info('Restock completed', {
+        category,
+        attempted: results.length,
+        successful: successCount,
+        encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback'
+      });
+      
+      // ✅ FIX 3: Always return success=true for API call success
+      res.status(200).json({
+        success: true,  // ✅ API call always succeeds
+        data: {
+          operationSuccess: successCount > 0,  // ✅ Separate field for operation result
+          category,
+          timestamp: Math.floor(Date.now() / 1000),
+          inventory: inventory,
+          cardsCreated: results,
+          encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
+          summary: {
+            attempted: results.length,
+            successful: successCount,
+            failed: results.length - successCount
+          }
+        }
+      });
+      
+    } finally {
+      // ✅ FIX 1: Always remove from active requests
+      activeRestockRequests.delete(category);
+    }
     
   } catch (error) {
     logger.error('Error processing restock request', { error: error.message });
+    
+    // Ensure cleanup on error
+    if (req.query.category) {
+      activeRestockRequests.delete(req.query.category);
+    }
+    
     res.status(500).json({
       success: false,
       error: error.message,
@@ -642,8 +736,8 @@ app.get('/api/categories', (req, res) => {
       name,
       availableCards: cards.length,
       priceRange: {
-        min: Math.min(...cards.map(c => parseFloat(formatUSDCUnits(c.publicPrice)))), // ✅ Use viem formatUnits
-        max: Math.max(...cards.map(c => parseFloat(formatUSDCUnits(c.publicPrice))))  // ✅ Use viem formatUnits
+        min: Math.min(...cards.map(c => parseFloat(formatUSDCUnits(c.publicPrice)))),
+        max: Math.max(...cards.map(c => parseFloat(formatUSDCUnits(c.publicPrice))))
       }
     }));
     
@@ -686,7 +780,7 @@ app.get('/api/inventory/:category', async (req, res) => {
       encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
       cards: availableCards.map(card => ({
         description: card.description,
-        price: formatUSDCUnits(card.publicPrice) + ' USDC', // ✅ Use viem formatUnits
+        price: formatUSDCUnits(card.publicPrice) + ' USDC',
         imageUrl: card.imageUrl
       }))
     });
@@ -713,7 +807,7 @@ app.use((err, req, res, next) => {
 const server = app.listen(PORT, () => {
   logger.info(`DG Market Backend server running on port ${PORT}`, {
     apiUrl: `http://localhost:${PORT}`,
-    version: '4.0 - Complete with Inco Integration',
+    version: '4.1 - Complete with All Fixes',
     environment: process.env.NODE_ENV || 'development'
   });
 });
@@ -734,7 +828,13 @@ async function startServer() {
       blockchain: blockchainConnected ? 'connected' : 'api-only mode',
       incoSDK: zap && typeof zap.encrypt === 'function' ? 'ready' : 'fallback mode',
       totalCategories: Object.keys(REAL_GIFT_CARD_PORTFOLIO).length,
-      totalCardTypes: Object.values(REAL_GIFT_CARD_PORTFOLIO).reduce((sum, cards) => sum + cards.length, 0)
+      totalCardTypes: Object.values(REAL_GIFT_CARD_PORTFOLIO).reduce((sum, cards) => sum + cards.length, 0),
+      features: [
+        'Concurrent request protection',
+        'Enhanced gas management', 
+        'Proper nonce handling',
+        'Improved API responses'
+      ]
     });
     
     // Test encryption on startup
