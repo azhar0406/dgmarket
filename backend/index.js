@@ -236,7 +236,7 @@ async function initBlockchain() {
       network: network.name,
       chainId: network.chainId.toString(),
       walletAddress: wallet.address,
-      balance: ethers.formatEther(balance),
+      balance: ethers.utils.formatEther(balance),
       contractAddress: DGMARKET_CORE_ADDRESS,
       incoSDK: zap && typeof zap.encrypt === 'function' ? 'ready' : 'fallback mode'
     });
