@@ -610,11 +610,25 @@ async function updateEnvFiles() {
       
       fs.writeFileSync(backendEnvPath, envContent);
 
-      const backendEnvPath2 = path.join(__dirname, '../../backend/admin/.env');
-      let envContent2 = fs.readFileSync(backendEnvPath2, 'utf8');
-      envContent2 = envContent2.replace(/DGMARKET_CORE_SEPOLIA=".*"/g, `DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
+   // Update backend admin .env file with proper error handling
+const backendEnvPath2 = path.join(__dirname, '../../backend/admin/.env');
 
-      fs.writeFileSync(backendEnvPath2, envContent2);
+console.log(`📂 Checking admin .env at: ${backendEnvPath2}`);
+
+if (fs.existsSync(backendEnvPath2)) {
+  try {
+    let envContent2 = fs.readFileSync(backendEnvPath2, 'utf8');
+    envContent2 = envContent2.replace(/DGMARKET_CORE_SEPOLIA=".*"/g, `DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
+    fs.writeFileSync(backendEnvPath2, envContent2);
+    console.log('✅ Backend admin .env file updated successfully');
+    console.log(`  DGMARKET_CORE_SEPOLIA="${contractAddresses.dgMarketCore}"`);
+  } catch (error) {
+    console.error(`❌ Error updating admin .env file: ${error.message}`);
+  }
+} else {
+  console.log(`❌ Admin .env file not found at ${backendEnvPath2}`);
+  console.log(`💡 Expected path: ${path.resolve(backendEnvPath2)}`);
+}
       
       console.log('✅ Backend .env file updated successfully:');
       console.log(`  CHAINLINK_MANAGER_ADDRESS="${contractAddresses.chainlinkGiftCardManager}"`);
