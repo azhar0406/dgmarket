@@ -587,10 +587,8 @@ app.get('/api/restock', async (req, res) => {
           blockchainResult: result
         });
         
-        // Small delay between card creations
-        if (results.length < cardsToCreate.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+       
         
       } catch (error) {
         logger.error('Failed to create individual card', {
@@ -614,13 +612,11 @@ app.get('/api/restock', async (req, res) => {
     });
     
     res.status(200).json({
-      success: successCount > 0,  // ✅ Single success field (operation result)
+      success: true,  // ✅ API call always succeeds
       data: {
+        operationSuccess: successCount > 0,  // ✅ Separate field for operation result
         category,
-        timestamp: Math.floor(Date.now() / 1000),
-        inventory: inventory,
         cardsCreated: results,
-        encryptionMode: zap && typeof zap.encrypt === 'function' ? 'Inco SDK' : 'Fallback',
         summary: {
           attempted: results.length,
           successful: successCount,
