@@ -32,6 +32,15 @@ DGMarket uses a **simplified 2-contract architecture** for optimal efficiency:
 1. **DGMarketCore.sol** - Core contract (FHE + Marketplace + Inventory + State-based ownership)
 2. **ChainlinkGiftCardManager.sol** - Automation-only contract for restocking
 
+## 📍 **DEPLOYED CONTRACT ADDRESSES - LATEST**
+
+### **Base Mainnet (8453) - Cross-Chain Bridge:**
+- **SimpleBridge**: `0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba`
+
+### **Base Sepolia (84532) - Gift Card Contracts:**
+- **DGMarketCore**: `0x48877c01E8FD5c29d1C7039b343c4129a6733E86`
+- **ChainlinkGiftCardManager**: `0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75`
+
 ## 🚀 Tech Stack
 
 ### **Smart Contracts**
@@ -87,8 +96,9 @@ cd contracts && npm install && cd ..
 **Frontend (.env.local):**
 ```env
 NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
-NEXT_PUBLIC_DGMARKET_CORE_ADDRESS=your_deployed_core_address
-NEXT_PUBLIC_CHAINLINK_MANAGER_ADDRESS=your_deployed_manager_address
+NEXT_PUBLIC_DGMARKET_CORE_ADDRESS=0x48877c01E8FD5c29d1C7039b343c4129a6733E86
+NEXT_PUBLIC_CHAINLINK_MANAGER_ADDRESS=0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75
+NEXT_PUBLIC_SIMPLE_BRIDGE_ADDRESS=0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba
 NEXT_PUBLIC_INCO_GATEWAY_URL=https://api.inco.org/api/v1
 NEXT_PUBLIC_ENVIRONMENT=testnet
 ```
@@ -99,7 +109,8 @@ PORT=8082
 BASE_SEPOLIA_RPC_URL=https://base-sepolia-rpc.publicnode.com
 BASE_MAINNET_RPC_URL=https://base.llamarpc.com
 PRIVATE_KEY_BASE_SEPOLIA=your_private_key
-DGMARKET_CORE_SEPOLIA=your_deployed_core_address
+DGMARKET_CORE_SEPOLIA=0x48877c01E8FD5c29d1C7039b343c4129a6733E86
+CHAINLINK_MANAGER_ADDRESS=0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75
 
 # OKX DEX API Configuration
 OKX_API_KEY=your_okx_api_key
@@ -108,7 +119,7 @@ OKX_API_PASSPHRASE=your_okx_passphrase
 OKX_PROJECT_ID=your_okx_project_id
 
 # Payment Processor
-SIMPLE_BRIDGE_MAINNET=your_bridge_contract_address
+SIMPLE_BRIDGE_MAINNET=0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba
 ADMIN_ADDRESS=your_admin_address
 ADMIN_PRIVATE_KEY=your_admin_private_key
 ```
@@ -151,7 +162,16 @@ Visit [http://localhost:3000](http://localhost:3000) to access DGMarket!
 
 ## 🏛️ Smart Contract Architecture
 
+### **SimpleBridge.sol - Cross-Chain Connector**
+- **Address**: `0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba` (Base Mainnet)
+- **Verification**: [https://basescan.org/address/0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba](https://basescan.org/address/0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba)
+- **Cross-Chain Events**: Facilitates ETH-to-gift card flow
+- **OKX Integration**: Supports automated payment processing
+- **Event Emission**: Triggers gift card purchases from mainnet
+
 ### **DGMarketCore.sol - The Heart of DGMarket**
+- **Address**: `0x48877c01E8FD5c29d1C7039b343c4129a6733E86`
+- **Verification**: [https://sepolia.basescan.org/address/0x48877c01E8FD5c29d1C7039b343c4129a6733E86](https://sepolia.basescan.org/address/0x48877c01E8FD5c29d1C7039b343c4129a6733E86)
 - **FHE Integration**: Encrypted gift card codes and PINs using Inco Lightning
 - **State-Based Ownership**: Clean address-based ownership tracking
 - **Public Pricing**: Prices visible for marketplace browsing
@@ -159,6 +179,8 @@ Visit [http://localhost:3000](http://localhost:3000) to access DGMarket!
 - **Resale Protection**: Prevents resale of revealed gift cards
 
 ### **ChainlinkGiftCardManager.sol - Automation Engine**
+- **Address**: `0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75`
+- **Verification**: [https://sepolia.basescan.org/address/0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75](https://sepolia.basescan.org/address/0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75)
 - **Chainlink Functions**: Automated API calls for restocking
 - **Request Management**: Tracks pending/fulfilled restock operations
 - **Error Handling**: Comprehensive API failure management
@@ -227,9 +249,17 @@ cd contracts && pnpm hardhat test --network baseSepolia
 # Test backend APIs
 cd backend && npm test
 
-# Test payment processor
-cd backend && node test-payment-flow.js
+
 ```
+
+## 🔗 Verification Links
+
+### **Base Mainnet:**
+- **SimpleBridge**: https://basescan.org/address/0xF7cF8159C710eb23b81b9EA1EbA5Db91Dd0dd4Ba
+
+### **Base Sepolia (Testnet):**
+- **DGMarketCore**: https://sepolia.basescan.org/address/0x48877c01E8FD5c29d1C7039b343c4129a6733E86
+- **ChainlinkGiftCardManager**: https://sepolia.basescan.org/address/0xAEC4cC181d3E14c6626aa6E189A16E6Be9766D75
 
 ## 📁 Project Structure
 
@@ -242,7 +272,7 @@ dgmarket/
 │   └── utils/                # Utility functions
 ├── backend/                  # Node.js backend services
 │   ├── admin/                # Admin management tools
-│   ├── payment-processor.js  # OKX DEX integration
+│   │   └── payment-processor.js  # OKX DEX integration
 │   └── index.js              # Main API server
 └── contracts/                # Smart contracts
     ├── contracts/            # Solidity source files
@@ -266,6 +296,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **GitHub**: [https://github.com/azhar0406/dgmarket](https://github.com/azhar0406/dgmarket)
 - **Base Sepolia Explorer**: [https://sepolia.basescan.org](https://sepolia.basescan.org)
+- **Base Mainnet Explorer**: [https://basescan.org](https://basescan.org)
 - **Inco Lightning**: [https://docs.inco.org](https://docs.inco.org)
 - **Chainlink Functions**: [https://functions.chain.link](https://functions.chain.link)
 
