@@ -1,6 +1,6 @@
 # DGMarket
 
-**DGMarket** is a revolutionary decentralized gift card marketplace that combines privacy, automation, and seamless payment experiences. Built on Base Sepolia, DGMarket uses Inco Lightning's Fully Homomorphic Encryption (FHE) to keep gift card codes completely private while enabling automated inventory management through Chainlink Functions.
+**DGMarket** is a revolutionary decentralized gift card marketplace that combines privacy, automation, and seamless payment experiences. Built on Basse Mainnet and Base Sepolia, DGMarket uses Inco Lightning's Fully Homomorphic Encryption (FHE) to keep gift card codes completely private while enabling automated inventory management through Chainlink Functions and uses OKX Dex API for ETH-to-USDC swap.
 
 ## 🎯 How DGMarket Works
 
